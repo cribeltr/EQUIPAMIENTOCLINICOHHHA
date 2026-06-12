@@ -174,6 +174,24 @@ table.lista tr.click:hover td{background:var(--azul-claro)}
 .tarea .quitar:hover{color:var(--rojo);background:#fff}
 .sub-form{border:1px dashed var(--gris-3);border-left:4px solid var(--azul);background:var(--gris-1);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:12px}
 
+/* ---------- Bandeja de pendientes ---------- */
+.pend-grupo{margin:18px 0 8px;font-size:.82rem;font-weight:700;color:var(--gris-4);text-transform:uppercase;letter-spacing:.5px;display:flex;gap:8px;align-items:center}
+.pend-card{border:1px solid var(--gris-2);border-left:4px solid var(--azul);border-radius:8px;padding:10px 14px;margin-bottom:10px;background:#fff;display:flex;flex-direction:column;gap:7px}
+.pend-card.vencido{border-left-color:var(--rojo);background:#fffbfb}
+.pend-card.espera{border-left-color:var(--ambar)}
+.pend-card.completado{border-left-color:var(--verde);opacity:.85}
+.pc-cab{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:.92rem}
+.pc-cab a{color:var(--azul-osc);text-decoration:none;font-weight:700}
+.pc-cab a:hover{text-decoration:underline}
+.pc-acciones{margin-left:auto;display:flex;gap:5px;flex-wrap:wrap}
+.pc-desc{font-size:.88rem}
+.pc-tareas{display:flex;flex-direction:column;gap:4px}
+.pc-tareas label{display:flex;gap:7px;align-items:center;font-size:.85rem;cursor:pointer}
+.pc-tareas label.hecha span{text-decoration:line-through;color:var(--gris-4)}
+.pc-pie{display:flex;gap:14px;flex-wrap:wrap;font-size:.78rem;color:var(--gris-4);align-items:center}
+.pc-gestion-in{display:flex;gap:8px;align-items:center}
+.pc-gestion-in input{flex:1;padding:6px 10px;border:1px solid var(--gris-3);border-radius:7px;font-size:.85rem}
+
 /* ---------- Expedientes correctivos (línea de tiempo) ---------- */
 .expediente{border:1px solid var(--gris-2);border-radius:10px;padding:12px 14px;margin-bottom:12px;background:#fff}
 .expediente.critico{border-color:#e8a9a7;background:#fffafa;box-shadow:inset 4px 0 0 var(--rojo)}
@@ -410,11 +428,14 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
   <div class="card">
     <h2>Pendientes</h2>
     <p class="sub">Gestiones pendientes asociadas a los equipos. Presiona un pendiente para ver o actualizar su gestión.</p>
-    <div class="fila-flex" style="margin-bottom:12px" id="filtros-pend">
-      <button class="btn mini" data-fp="abiertos">Abiertos</button>
-      <button class="btn mini" data-fp="vencidos">Vencidos</button>
-      <button class="btn mini" data-fp="completados">Completados</button>
-      <button class="btn mini" data-fp="todos">Todos</button>
+    <div class="fila-flex" style="margin-bottom:8px" id="pend-metricas"></div>
+    <div class="fila-flex" style="margin-bottom:14px">
+      <label style="font-size:.85rem;color:var(--gris-4)">Responsable ejecutivo
+        <select id="pend-f-resp" style="margin-left:6px;padding:5px 8px;border:1px solid var(--gris-3);border-radius:7px"><option value="">Todos</option></select>
+      </label>
+      <label style="font-size:.85rem;color:var(--gris-4)">Tipo
+        <select id="pend-f-tipo" style="margin-left:6px;padding:5px 8px;border:1px solid var(--gris-3);border-radius:7px"><option value="">Todos</option></select>
+      </label>
     </div>
     <div id="lista-pendientes"></div>
   </div>
@@ -806,7 +827,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-12.15';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-12.16';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -829,12 +850,13 @@ const CAMPOS = [
 /* Columnas calculadas de la vista de equipos (estado, última actualización, pendientes) */
 const CAMPOS_CALC = [
   {k:'_estado',      l:'Estado equipo'},
+  {k:'_diasEstado',  l:'Días en estado'},
   {k:'_actualizado', l:'Última actualización'},
   {k:'_pend',        l:'Pendientes'}
 ];
 const CAMPOS_TABLA = CAMPOS.concat(CAMPOS_CALC);
 /* columnas visibles por defecto en la vista de equipos: caben sin desplazamiento horizontal */
-const COLS_EQ_DEFECTO = ['equipo','serie','inventario','servicio','ubicacion','_estado','_actualizado','_pend'];
+const COLS_EQ_DEFECTO = ['equipo','serie','inventario','servicio','ubicacion','_estado','_diasEstado','_actualizado','_pend'];
 /* Columnas de la vista Plan de Mantenimiento (una fila por evento de mantención) */
 const PLAN_COLS = [
   {k:'equipo',l:'Equipo'},{k:'serie',l:'Serie'},{k:'inventario',l:'N° Inventario'},{k:'servicio',l:'Servicio'},
@@ -1653,16 +1675,16 @@ function exportarTodo(){
     [{wch:28},{wch:16},{wch:14},{wch:18},{wch:11},{wch:15},{wch:9},{wch:9},{wch:44},{wch:24},{wch:38},{wch:13},{wch:9},{wch:12},{wch:11}]), 'Mantenciones');
 
   /* Hoja 4: Pendientes (con tareas y bitácora de gestión asociada) */
-  const filasP = [['Equipo','Serie','N° Inventario','Tipo de pendiente','Fecha compromiso','Descripción','Tareas','Responsable Administrativo','Responsable Ejecutivo','Estado','Gestión asociada','Creado']];
+  const filasP = [['Equipo','Serie','N° Inventario','Tipo de pendiente','Fecha compromiso','Descripción','Tareas','Responsable Administrativo','Responsable Ejecutivo','Estado','En espera de','Fecha completado','Gestión asociada','Creado']];
   state.pendientes.forEach(p=>{
     filasP.push([eqCampo(p.equipoKey,'equipo'),eqCampo(p.equipoKey,'serie'),eqCampo(p.equipoKey,'inventario'),
       p.tipo||'', fmtFecha(p.fechaCompromiso), p.descripcion||'',
       (p.tareas||[]).map(t=>(t.hecha?'[✔] ':'[  ] ')+t.texto).join('\n'),
-      p.respAdmin||'', p.respEjec||'', p.estado||'Abierto',
+      p.respAdmin||'', p.respEjec||'', p.estado||'Abierto', p.esperaDe||'', p.fechaCompletado?fmtFecha(p.fechaCompletado):'',
       (p.gestiones||[]).map(g=>g.fecha+' — '+g.texto).join('\n'), fmtFecha(p.creado)]);
   });
   XLSX.utils.book_append_sheet(wb, hojaTexto(filasP,
-    [{wch:28},{wch:16},{wch:14},{wch:32},{wch:15},{wch:36},{wch:44},{wch:24},{wch:24},{wch:11},{wch:54},{wch:11}]), 'Pendientes');
+    [{wch:28},{wch:16},{wch:14},{wch:32},{wch:15},{wch:36},{wch:44},{wch:24},{wch:24},{wch:11},{wch:22},{wch:13},{wch:54},{wch:11}]), 'Pendientes');
 
   /* Hoja 5: Correctivos — eventos del Paso 10 (OT / Reporte / Envío a ST) */
   const filasC = [['Equipo','Serie','N° Inventario','Servicio','Tipo de evento','Requerimiento','Fecha documento','Folio Solicitud SIGEM','N° de envío','Técnico asignado','Estado del equipo','Tipo de compra','N° informe técnico','Fecha informe técnico','Responsable informe técnico','Empresa','N° orden de compra','Fecha orden de compra','Descripción orden de compra','Estado evento','Fecha cierre','Bitácora de avances','Gestión pendiente','Tipo registro','Creado']];
@@ -2015,8 +2037,13 @@ function guardarPendiente(){
     tareas:peTareas, respAdmin:adm, respEjec:eje, gestiones:peGestiones,
     estado: peEditando ? (valToggle('pe-estado')||'Abierto') : 'Abierto'
   };
-  if(peEditando){ Object.assign(peEditando, datos, {actualizado:hoyISO()}); toast('✅ Pendiente actualizado.'); }
-  else { state.pendientes.push(Object.assign({id:uid(), creado:hoyISO()}, datos)); toast('✅ Pendiente creado.'); }
+  if(peEditando){
+    Object.assign(peEditando, datos, {actualizado:hoyISO()});
+    if(peEditando.estado==='Completado' && !peEditando.fechaCompletado) peEditando.fechaCompletado=hoyISO();
+    if(peEditando.estado!=='Completado') peEditando.fechaCompletado='';
+    toast('✅ Pendiente actualizado.');
+  }
+  else { state.pendientes.push(Object.assign({id:uid(), creado:hoyISO(), fechaCompletado:'', esperaDe:''}, datos)); toast('✅ Pendiente creado.'); }
   prefs.ultimoRespEje=eje; guardarPrefs();
   guardar(); cerrarModal('modal-pend'); peEditando=null; renderTodo();
 }
@@ -2205,8 +2232,11 @@ function calcularDerivadosEquipos(){
   /* columnas calculadas de la tabla de equipos: estado, última actualización y pendientes */
   const pendPorEq={};
   state.pendientes.forEach(p=>{ if(p.estado!=='Completado') pendPorEq[p.equipoKey]=(pendPorEq[p.equipoKey]||0)+1; });
+  const hoy=hoyISO();
   state.equipos.forEach(e=>{
-    e._estado = estadoActualEquipo(e.key)||'';
+    const info = estadoActualEquipoInfo(e.key);
+    e._estado = info?info.est:'';
+    e._diasEstado = (info && info.f) ? String(diasEntre(info.f, hoy)) : '';
     e._actualizado = ultimaActualizacionEquipo(e.key);
     const n = pendPorEq[e.key]||0;
     e._pend = n ? ('Sí ('+n+')') : 'No';
@@ -2256,8 +2286,8 @@ function limpiarTrasCambio(ot, tipoOriginal, fechaOriginal){
   if(tipoOriginal==='Informe técnico emitido' && !hay('Informe técnico emitido') && ot.informeTecnicoFecha===fechaOriginal) ot.informeTecnicoFecha='';
   if(tipoOriginal==='OC emitida' && !hay('OC emitida') && ot.ordenCompraFecha===fechaOriginal) ot.ordenCompraFecha='';
 }
-function estadoActualEquipo(key){
-  /* último estado conocido del equipo: MP de la app, eventos correctivos, visitas y cierres */
+function estadoActualEquipoInfo(key){
+  /* último estado conocido del equipo y su fecha: MP de la app, eventos correctivos, visitas, envíos, retornos y cierres */
   const cand=[
     ...state.manuales.filter(m=>m.equipoKey===key && m.estadoEquipo).map(m=>({f:m.fecha||'', est:m.estadoEquipo})),
     ...state.correctivos.filter(c=>c.equipoKey===key && c.estadoEquipo).map(c=>({f:c.fechaDocumento||'', est:estadoCorrectivoDe(c.estadoEquipo)})),
@@ -2266,7 +2296,37 @@ function estadoActualEquipo(key){
     ...state.correctivos.filter(c=>c.equipoKey===key).flatMap(c=>(c.avances||[]).filter(a=>a.tipo==='Envío a Servicio Técnico').map(a=>({f:a.fecha||'', est:'Servicio Técnico'}))),
     ...state.correctivos.filter(c=>c.equipoKey===key).flatMap(c=>(c.avances||[]).filter(a=>a.tipo==='Retorno de Servicio Técnico' && a.estadoEquipoRetorno).map(a=>({f:a.fecha||'', est:a.estadoEquipoRetorno})))
   ].sort((a,b)=>b.f.localeCompare(a.f));
-  return cand.length?cand[0].est:null;
+  return cand.length?cand[0]:null;
+}
+function estadoActualEquipo(key){ const i=estadoActualEquipoInfo(key); return i?i.est:null; }
+/* ---------- Gestión de pendientes (bandeja) ---------- */
+function estadoGestionPendiente(p){
+  if(p.estado==='Completado') return 'Completado';
+  if(p.esperaDe) return 'En espera';
+  const actividad=(p.gestiones&&p.gestiones.length)||(p.tareas&&p.tareas.some(t=>t.hecha));
+  return actividad?'En gestión':'Nuevo';
+}
+function grupoPendiente(p, hoy){
+  if(p.estado==='Completado') return 'completados';
+  if(p.esperaDe) return 'espera';
+  const f=p.fechaCompromiso||'';
+  if(f && f<hoy) return 'atrasados';
+  if(f===hoy) return 'hoy';
+  if(f && f<=sumarDias(hoy,7)) return 'semana';
+  return 'proximos';
+}
+function metricasPendientes(){
+  const hoy=hoyISO();
+  const abiertos=state.pendientes.filter(p=>p.estado!=='Completado');
+  const comp=state.pendientes.filter(p=>p.estado==='Completado');
+  const conAmbas=comp.filter(p=>p.fechaCompletado&&p.creado);
+  return {
+    abiertos:abiertos.length,
+    atrasados:abiertos.filter(p=>!p.esperaDe&&p.fechaCompromiso&&p.fechaCompromiso<hoy).length,
+    espera:abiertos.filter(p=>p.esperaDe).length,
+    compSemana:comp.filter(p=>p.fechaCompletado&&p.fechaCompletado>=sumarDias(hoy,-6)).length,
+    tMedio:conAmbas.length?Math.round(conAmbas.reduce((a,p)=>a+Math.max(0,diasEntre(p.creado,p.fechaCompletado)),0)/conAmbas.length):null
+  };
 }
 function resultadosPorMes(){
   /* une los resultados de la planilla con las MP registradas en la app, sin duplicar:
@@ -2688,26 +2748,115 @@ function tablaPendientes(lista){
       <td>${esc(p.respAdmin)}</td>
       <td>${esc(p.respEjec)}</td>
       <td style="max-width:240px">${ultima?'<small><time style="color:var(--gris-4)">'+esc(ultima.fecha)+'</time><br>'+esc(ultima.texto)+'</small>':'—'}</td>
-      <td>${p.estado==='Completado'?'<span class="chip verde">Completado</span>':'<span class="chip azul">Abierto</span>'}</td>
+      <td>${p.estado==='Completado'?'<span class="chip verde">Completado</span>':(p.esperaDe?'<span class="chip ambar">✋ En espera</span>':'<span class="chip azul">Abierto</span>')}</td>
     </tr>`;
   }).join('');
   return `<div style="overflow:auto"><table class="lista">
     <tr><th>Equipo</th><th>Tipo de pendiente</th><th>F. compromiso</th><th>Tareas</th><th>Resp. Administrativo</th><th>Resp. Ejecutivo</th><th>Última gestión</th><th>Estado</th></tr>
     ${filas}</table></div>`;
 }
-function renderPendientes(){
+let pendFResp='', pendFTipo='';
+function tarjetaPendiente(p){
   const hoy=hoyISO();
-  let lista=state.pendientes;
-  if(filtroPend==='abiertos') lista=lista.filter(p=>p.estado!=='Completado');
-  else if(filtroPend==='vencidos') lista=lista.filter(p=>p.estado!=='Completado' && p.fechaCompromiso && p.fechaCompromiso<hoy);
-  else if(filtroPend==='completados') lista=lista.filter(p=>p.estado==='Completado');
-  $$('#filtros-pend button').forEach(b=>{
-    const sel=b.dataset.fp===filtroPend;
-    b.classList.toggle('primario', sel);
-  });
-  $('#lista-pendientes').innerHTML = lista.length ? tablaPendientes(lista)
-    : '<div class="vacio">No hay pendientes en esta categoría. Los pendientes se crean desde la vista de detalle de cada equipo (botón «📋 Pendientes»).</div>';
+  const e=equipoPorKey(p.equipoKey);
+  const est=estadoGestionPendiente(p);
+  const vencido = p.estado!=='Completado' && !p.esperaDe && p.fechaCompromiso && p.fechaCompromiso<hoy;
+  const atraso = vencido?diasEntre(p.fechaCompromiso,hoy):0;
+  const tareas=p.tareas||[];
+  const ult=(p.gestiones&&p.gestiones.length)?p.gestiones[p.gestiones.length-1]:null;
+  const chipEst = est==='Completado' ? '<span class="chip verde">Completado</span>'
+    : est==='En espera' ? `<span class="chip ambar">✋ En espera: ${esc(p.esperaDe)}</span>`
+    : est==='En gestión' ? '<span class="chip azul">En gestión</span>' : '<span class="chip gris">Nuevo</span>';
+  const compromiso = p.fechaCompromiso ? (vencido?`<span class="chip rojo">⚠ ${atraso} día${atraso!==1?'s':''} de atraso</span>`:`<span class="chip gris">compromiso ${fmtFecha(p.fechaCompromiso)}</span>`) : '<span class="chip gris">sin fecha</span>';
+  const acciones = p.estado==='Completado'
+    ? `<button class="btn mini" data-pc-editar="${p.id}" title="Abrir el detalle">✎</button>`
+    : `<button class="btn mini primario" data-pc-completar="${p.id}" title="Completar ahora">✔</button>
+       <button class="btn mini" data-pc-pos="${p.id}|1" title="Posponer 1 día">+1d</button>
+       <button class="btn mini" data-pc-pos="${p.id}|3" title="Posponer 3 días">+3d</button>
+       <button class="btn mini" data-pc-pos="${p.id}|7" title="Posponer 1 semana">+7d</button>
+       ${p.esperaDe?`<button class="btn mini" data-pc-reanudar="${p.id}" title="Quitar la espera">▶</button>`:`<button class="btn mini" data-pc-espera="${p.id}" title="Marcar en espera de un tercero">✋</button>`}
+       <button class="btn mini" data-pc-editar="${p.id}" title="Abrir el detalle">✎</button>`;
+  const tareasHtml = tareas.length?`<div class="pc-tareas">${tareas.map((t,i)=>`<label class="${t.hecha?'hecha':''}"><input type="checkbox" data-pc-tarea="${p.id}|${i}" ${t.hecha?'checked':''} ${p.estado==='Completado'?'disabled':''}> <span>${esc(t.texto)}</span></label>`).join('')}</div>`:'';
+  const gestionIn = p.estado==='Completado' ? '' : `<div class="pc-gestion-in"><input type="text" data-pc-gestion="${p.id}" placeholder="➕ Registrar gestión… (Enter)"></div>`;
+  return `<div class="pend-card ${vencido?'vencido':''} ${p.esperaDe&&p.estado!=='Completado'?'espera':''} ${p.estado==='Completado'?'completado':''}">
+    <div class="pc-cab">
+      <a href="#" data-pc-eq="${esc(p.equipoKey)}">${esc(e?e.equipo:p.equipoKey)}${e&&e.serie?' ('+esc(e.serie)+')':''}</a>
+      <span class="chip morado">${esc(p.tipo||'—')}</span>
+      ${chipEst} ${compromiso}
+      ${tareas.length?`<span class="chip gris">tareas ${tareas.filter(t=>t.hecha).length}/${tareas.length}</span>`:''}
+      <span class="pc-acciones">${acciones}</span>
+    </div>
+    ${p.descripcion?`<div class="pc-desc">${esc(p.descripcion)}</div>`:''}
+    ${tareasHtml}
+    ${ult?`<div style="font-size:.8rem;color:var(--gris-4)">Última gestión: <time>${esc(ult.fecha)}</time> — ${esc(ult.texto)}</div>`:''}
+    ${gestionIn}
+    <div class="pc-pie">
+      <span>Resp. adm: ${esc(p.respAdmin||'—')}</span><span>Resp. eje: ${esc(p.respEjec||'—')}</span>
+      <span>Creado: ${fmtFecha(p.creado)}</span>
+      ${p.fechaCompletado?`<span>Completado: ${fmtFecha(p.fechaCompletado)}</span>`:''}
+    </div>
+  </div>`;
+}
+function renderPendientes(){
+  const cont=$('#lista-pendientes');
+  if(!cont) return;
+  const m=metricasPendientes();
+  $('#pend-metricas').innerHTML = `
+    <span class="chip azul">${m.abiertos} abierto${m.abiertos!==1?'s':''}</span>
+    ${m.atrasados?`<span class="chip rojo">⚠ ${m.atrasados} atrasado${m.atrasados!==1?'s':''}</span>`:''}
+    ${m.espera?`<span class="chip ambar">✋ ${m.espera} en espera</span>`:''}
+    <span class="chip verde">✔ ${m.compSemana} completado${m.compSemana!==1?'s':''} esta semana</span>
+    ${m.tMedio!==null?`<span class="chip gris">⏱ resolución media: ${m.tMedio} día${m.tMedio!==1?'s':''}</span>`:''}`;
+  let lista=state.pendientes.slice();
+  if(pendFResp) lista=lista.filter(p=>p.respEjec===pendFResp);
+  if(pendFTipo) lista=lista.filter(p=>p.tipo===pendFTipo);
+  if(!lista.length){
+    cont.innerHTML='<div class="vacio">No hay pendientes con estos filtros. Se crean desde la ficha de cada equipo (botón «📋 Pendientes») o automáticamente al registrar mantenciones con gestión pendiente.</div>';
+    renderBadges(); return;
+  }
+  const hoy=hoyISO();
+  const grupos={atrasados:[], hoy:[], semana:[], proximos:[], espera:[], completados:[]};
+  lista.forEach(p=>grupos[grupoPendiente(p,hoy)].push(p));
+  Object.values(grupos).forEach(l=>l.sort((a,b)=>(a.fechaCompromiso||'9999').localeCompare(b.fechaCompromiso||'9999')));
+  grupos.completados.sort((a,b)=>(b.fechaCompletado||'').localeCompare(a.fechaCompletado||''));
+  const sec=(titulo, l, abierto)=>!l.length?'':`<div class="pend-grupo">${titulo} <span class="chip gris">${l.length}</span></div>${l.map(tarjetaPendiente).join('')}`;
+  cont.innerHTML =
+    sec('🔴 Atrasados', grupos.atrasados) +
+    sec('🟠 Hoy', grupos.hoy) +
+    sec('🔵 Esta semana', grupos.semana) +
+    sec('⚪ Próximos / sin fecha', grupos.proximos) +
+    sec('✋ En espera', grupos.espera) +
+    (grupos.completados.length?`<details style="margin-top:16px"><summary class="pend-grupo" style="cursor:pointer">✅ Completados <span class="chip gris">${grupos.completados.length}</span></summary>${grupos.completados.map(tarjetaPendiente).join('')}</details>`:'');
   renderBadges();
+}
+function pendPorId(id){ return state.pendientes.find(p=>p.id===id); }
+function gestionAuto(p, texto){ (p.gestiones=p.gestiones||[]).push({fecha:new Date().toLocaleString('es-CL'), texto}); p.actualizado=hoyISO(); }
+function pcCompletar(id){
+  const p=pendPorId(id); if(!p) return;
+  p.estado='Completado'; p.fechaCompletado=hoyISO(); p.esperaDe='';
+  gestionAuto(p,'Completado desde la bandeja de pendientes.');
+  guardar(); renderTodo(); toast('✔ Pendiente completado.');
+}
+function pcPosponer(id, dias){
+  const p=pendPorId(id); if(!p) return;
+  const base=(p.fechaCompromiso && p.fechaCompromiso>hoyISO())?p.fechaCompromiso:hoyISO();
+  p.fechaCompromiso=sumarDias(base, dias);
+  gestionAuto(p,'Compromiso pospuesto al '+fmtFecha(p.fechaCompromiso)+' (+'+dias+' día'+(dias!==1?'s':'')+').');
+  guardar(); renderTodo(); toast('📅 Compromiso pospuesto al '+fmtFecha(p.fechaCompromiso)+'.');
+}
+function pcEspera(id){
+  const p=pendPorId(id); if(!p) return;
+  const motivo=(prompt('¿Esperando qué o a quién? (ej: respuesta HEMISUR, firma jefatura)')||'').trim();
+  if(!motivo) return;
+  p.esperaDe=motivo;
+  gestionAuto(p,'En espera: '+motivo+'.');
+  guardar(); renderTodo(); toast('✋ Marcado en espera: '+motivo+'.');
+}
+function pcReanudar(id){
+  const p=pendPorId(id); if(!p) return;
+  gestionAuto(p,'Espera finalizada (era: '+(p.esperaDe||'')+').');
+  p.esperaDe='';
+  guardar(); renderTodo(); toast('▶ Espera finalizada; el pendiente vuelve a su grupo.');
 }
 
 /* =====================================================================
@@ -2849,6 +2998,8 @@ function poblarSelects(){
   $('#mp-resultado').innerHTML = '<option value="">— Seleccionar —</option>'+
     ORDEN_RESULTADOS.map(c=>`<option value="${c}">${c} — ${esc(RESULTADOS[c].length>60?RESULTADOS[c].slice(0,60)+'…':RESULTADOS[c])}</option>`).join('');
   $('#pe-tipo').innerHTML = TIPOS_PENDIENTE.map(t=>`<option>${esc(t)}</option>`).join('');
+  $('#pend-f-resp').innerHTML = '<option value="">Todos</option>'+opEj;
+  $('#pend-f-tipo').innerHTML = '<option value="">Todos</option>'+TIPOS_PENDIENTE.map(t=>`<option>${esc(t)}</option>`).join('');
   $('#tabla-causales').insertAdjacentHTML('beforeend',
     Object.entries(CAUSALES).map(([c,d])=>`<tr><td><span class="chip ambar">${c}</span></td><td>${esc(d)}</td></tr>`).join(''));
   $('#tabla-meses-cols').insertAdjacentHTML('beforeend',
@@ -3062,14 +3213,36 @@ function conectarEventos(){
     if(tr) abrirDetalle(tr.dataset.operEq);
   });
 
-  /* Pendientes globales */
-  $('#filtros-pend').addEventListener('click',ev=>{
-    const b=ev.target.closest('[data-fp]');
-    if(b){ filtroPend=b.dataset.fp; renderPendientes(); }
-  });
+  /* Bandeja de pendientes */
+  $('#pend-f-resp').addEventListener('change',ev=>{ pendFResp=ev.target.value; renderPendientes(); });
+  $('#pend-f-tipo').addEventListener('change',ev=>{ pendFTipo=ev.target.value; renderPendientes(); });
   $('#lista-pendientes').addEventListener('click',ev=>{
-    const tr=ev.target.closest('tr[data-pendiente]');
-    if(tr){ const p=state.pendientes.find(x=>x.id===tr.dataset.pendiente); if(p) abrirModalPendiente(p.equipoKey,p,null); }
+    const eq=ev.target.closest('[data-pc-eq]');
+    if(eq){ ev.preventDefault(); abrirDetalle(eq.dataset.pcEq); return; }
+    const co=ev.target.closest('[data-pc-completar]');
+    if(co){ pcCompletar(co.dataset.pcCompletar); return; }
+    const po=ev.target.closest('[data-pc-pos]');
+    if(po){ const [id,d]=po.dataset.pcPos.split('|'); pcPosponer(id, parseInt(d,10)); return; }
+    const es=ev.target.closest('[data-pc-espera]');
+    if(es){ pcEspera(es.dataset.pcEspera); return; }
+    const re=ev.target.closest('[data-pc-reanudar]');
+    if(re){ pcReanudar(re.dataset.pcReanudar); return; }
+    const ed=ev.target.closest('[data-pc-editar]');
+    if(ed){ const p=pendPorId(ed.dataset.pcEditar); if(p) abrirModalPendiente(p.equipoKey,p,null); return; }
+    if(ev.target.matches('[data-pc-tarea]')){
+      const [id,i]=ev.target.dataset.pcTarea.split('|');
+      const p=pendPorId(id);
+      if(p && p.tareas && p.tareas[+i]){ p.tareas[+i].hecha=ev.target.checked; p.actualizado=hoyISO(); guardar(); renderPendientes(); }
+    }
+  });
+  $('#lista-pendientes').addEventListener('keydown',ev=>{
+    if(ev.key!=='Enter' || !ev.target.matches('[data-pc-gestion]')) return;
+    ev.preventDefault();
+    const p=pendPorId(ev.target.dataset.pcGestion);
+    const t=ev.target.value.trim();
+    if(!p||!t) return;
+    gestionAuto(p, t);
+    guardar(); renderPendientes(); toast('➕ Gestión registrada.');
   });
 }
 
