@@ -315,7 +315,8 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
   </div>
 
   <div class="card">
-    <h2>Mantenimiento Correctivo · Órdenes de Trabajo</h2>
+    <h2>Mantenimiento Correctivo · Documentos</h2>
+    <p class="sub">Órdenes de Trabajo, Reportes de Servicio y Envíos a Servicio Técnico del equipo.</p>
     <div id="det-correctivos"></div>
   </div>
 </section>
@@ -525,12 +526,16 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
     </div>
     <div class="modal-cuerpo">
       <div class="f-grupo">
-        <label class="et">Orden de Trabajo</label>
-        <select id="ot-selector"></select>
+        <label class="et">Tipo de documento <span class="req">*</span></label>
+        <select id="ot-tipo-doc">
+          <option value="Orden de Trabajo">Orden de Trabajo</option>
+          <option value="Reporte de Servicio">Reporte de Servicio</option>
+          <option value="Envío a Servicio Técnico">Envío a Servicio Técnico</option>
+        </select>
       </div>
       <div class="f-grupo">
         <label class="et">Requerimiento <span style="color:var(--gris-4);font-weight:400">(opcional)</span></label>
-        <input type="text" id="ot-requerimiento" placeholder="Describe el requerimiento de la orden de trabajo…">
+        <input type="text" id="ot-requerimiento" placeholder="Describe el requerimiento del documento…">
       </div>
       <div class="f-2col">
         <div class="f-grupo">
@@ -552,15 +557,27 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
           <select id="ot-estado">
             <option value="Operativo">Operativo</option>
             <option value="No Operativo">No Operativo</option>
-            <option value="Servicio">Servicio</option>
+            <option value="Servicio Técnico">Servicio Técnico</option>
           </select>
+        </div>
+      </div>
+      <div class="f-2col">
+        <div class="f-grupo">
+          <label class="et">Tipo de registro</label>
+          <div class="toggle-par" id="ot-tipo-reg">
+            <button type="button" data-v="Oficial">Oficial</button>
+            <button type="button" data-v="Borrador">Borrador</button>
+          </div>
+        </div>
+        <div class="f-grupo" style="display:flex;align-items:center">
+          <label class="check-linea" style="margin-top:18px"><input type="checkbox" id="ot-gestion"> Gestión pendiente: <strong id="ot-gestion-txt">No</strong></label>
         </div>
       </div>
     </div>
     <div class="modal-pie">
       <button class="btn peligro" id="ot-eliminar" style="display:none;margin-right:auto">🗑 Eliminar</button>
       <button class="btn" data-cerrar="modal-ot">Cancelar</button>
-      <button class="btn primario" id="ot-guardar">💾 Guardar orden de trabajo</button>
+      <button class="btn primario" id="ot-guardar">💾 Guardar documento</button>
     </div>
   </div>
 </div>
@@ -935,7 +952,7 @@ function renderResumen(){
     [state.meta.oficializados,'Borradores actualizados a Oficial'],
     [state.manuales.length,'Registros creados en la app'],
     [state.pendientes.filter(p=>p.estado!=='Completado').length,'Pendientes abiertos'],
-    [state.correctivos.length,'Órdenes de trabajo (correctivo)']
+    [state.correctivos.length,'Documentos de mant. correctivo']
   ];
   $('#resumen-kpis').innerHTML = kpis.map(k=>`<div class="kpi"><b>${k[0]}</b><span>${k[1]}</span></div>`).join('');
   $('#resumen-avisos').innerHTML =
@@ -1146,15 +1163,15 @@ function exportarTodo(){
   XLSX.utils.book_append_sheet(wb, hojaTexto(filasP,
     [{wch:28},{wch:16},{wch:14},{wch:32},{wch:15},{wch:36},{wch:44},{wch:24},{wch:24},{wch:11},{wch:54},{wch:11}]), 'Pendientes');
 
-  /* Hoja 5: Correctivos — Órdenes de Trabajo (Paso 10) */
-  const filasC = [['Equipo','Serie','N° Inventario','Servicio','Orden de Trabajo','Requerimiento','Fecha documento','Folio Solicitud SIGEM','Técnico asignado','Estado del equipo','Creado']];
+  /* Hoja 5: Correctivos — documentos del Paso 10 (OT / Reporte / Envío a ST) */
+  const filasC = [['Equipo','Serie','N° Inventario','Servicio','Tipo de documento','Requerimiento','Fecha documento','Folio Solicitud SIGEM','Técnico asignado','Estado del equipo','Gestión pendiente','Tipo registro','Creado']];
   state.correctivos.slice().sort((a,b)=>(a.fechaDocumento||'').localeCompare(b.fechaDocumento||'')).forEach(c=>{
     filasC.push([eqCampo(c.equipoKey,'equipo'),eqCampo(c.equipoKey,'serie'),eqCampo(c.equipoKey,'inventario'),eqCampo(c.equipoKey,'servicio'),
-      c.ordenTrabajo||'', c.requerimiento||'', fmtFecha(c.fechaDocumento), c.folioSigem||'',
-      c.tecnico||'', c.estadoEquipo||'', fmtFecha(c.creado)]);
+      tipoDocDe(c), c.requerimiento||'', fmtFecha(c.fechaDocumento), c.folioSigem||'',
+      c.tecnico||'', estadoCorrectivoDe(c.estadoEquipo), c.gestionPendiente?'Sí':'No', c.tipoRegistro||'Oficial', fmtFecha(c.creado)]);
   });
   XLSX.utils.book_append_sheet(wb, hojaTexto(filasC,
-    [{wch:28},{wch:16},{wch:14},{wch:18},{wch:22},{wch:40},{wch:15},{wch:18},{wch:24},{wch:14},{wch:11}]), 'Correctivos');
+    [{wch:28},{wch:16},{wch:14},{wch:18},{wch:24},{wch:38},{wch:15},{wch:18},{wch:24},{wch:16},{wch:9},{wch:12},{wch:11}]), 'Correctivos');
 
   XLSX.writeFile(wb, 'Registros_GMP2026_'+hoyISO()+'.xlsx');
   toast('⬇ Excel completo descargado: Equipos, Programación, Mantenciones, Pendientes y Correctivos.');
@@ -1213,15 +1230,15 @@ function renderDetalle(key){
     ...manualesEq.map(m=>({f:m.fecha||'', est:m.estadoEquipo})),
     ...otsEq.map(c=>({f:c.fechaDocumento||'', est:c.estadoEquipo}))
   ].filter(x=>x.est).sort((a,b)=>b.f.localeCompare(a.f));
-  const estadoActual = candEstado.length?candEstado[0].est:null;
+  const estadoActual = candEstado.length?estadoCorrectivoDe(candEstado[0].est):null;
   const chips=[];
   if(e.servicio) chips.push(`<span class="chip azul">${esc(e.servicio)}</span>`);
   if(e.clasificacion) chips.push(`<span class="chip morado">${esc(e.clasificacion)}</span>`);
   if(valorUtil(e.enu)) chips.push(`<span class="chip negro">ENU/Baja: ${esc(e.enu)}</span>`);
   if(estadoActual) chips.push(estadoActual==='Operativo'
     ? '<span class="chip verde">✔ Operativo</span>'
-    : estadoActual==='Servicio'
-      ? '<span class="chip ambar">🔧 Servicio</span>'
+    : estadoActual==='Servicio Técnico'
+      ? '<span class="chip ambar">🔧 Servicio Técnico</span>'
       : '<span class="chip rojo">✖ No Operativo</span>');
   chips.push(`<span class="chip gris">Identificador: ${esc(key)}</span>`);
   $('#det-chips').innerHTML = chips.join('');
@@ -1278,18 +1295,22 @@ function renderDetalle(key){
   const pendEq = state.pendientes.filter(p=>p.equipoKey===key);
   $('#det-pendientes').innerHTML = pendEq.length ? tablaPendientes(pendEq) : '<div class="vacio">Sin pendientes para este equipo. Usa el botón «📋 Pendientes» para crear uno.</div>';
 
-  /* Órdenes de trabajo de mantenimiento correctivo (Paso 10) */
+  /* Documentos de mantenimiento correctivo (Paso 10) */
   $('#det-correctivos').innerHTML = otsEq.length ? `<table class="lista">
-    <tr><th>Orden de Trabajo</th><th>Fecha doc.</th><th>Folio SIGEM</th><th>Requerimiento</th><th>Técnico asignado</th><th>Estado equipo</th><th></th></tr>
-    ${otsEq.map(c=>`<tr>
-      <td><strong>${esc(c.ordenTrabajo||'OT')}</strong></td>
+    <tr><th>Tipo de documento</th><th>Fecha doc.</th><th>Folio SIGEM</th><th>Requerimiento</th><th>Técnico asignado</th><th>Estado equipo</th><th>Registro</th><th></th></tr>
+    ${otsEq.map(c=>{
+      const est = estadoCorrectivoDe(c.estadoEquipo);
+      return `<tr>
+      <td><strong>${esc(tipoDocDe(c))}</strong></td>
       <td>${fmtFecha(c.fechaDocumento)}</td>
       <td>${esc(c.folioSigem)||'—'}</td>
-      <td style="max-width:300px">${esc(c.requerimiento)||'—'}</td>
+      <td style="max-width:280px">${esc(c.requerimiento)||'—'}${c.gestionPendiente?'<br><span class="chip ambar">Gestión pendiente</span>':''}</td>
       <td>${esc(c.tecnico)}</td>
-      <td>${c.estadoEquipo==='Operativo'?'<span class="chip verde">Operativo</span>':c.estadoEquipo==='Servicio'?'<span class="chip ambar">Servicio</span>':'<span class="chip rojo">No Operativo</span>'}</td>
-      <td style="white-space:nowrap"><button class="btn mini" data-editar-ot="${c.id}">✎</button> <button class="btn mini peligro" data-borrar-ot="${c.id}">🗑</button></td></tr>`).join('')}
-  </table>` : '<div class="vacio">Sin órdenes de trabajo. Usa el botón «🔩 Mantenimiento Correctivo» para crear una.</div>';
+      <td>${est==='Operativo'?'<span class="chip verde">Operativo</span>':est==='Servicio Técnico'?'<span class="chip ambar">Servicio Técnico</span>':'<span class="chip rojo">No Operativo</span>'}</td>
+      <td>${(c.tipoRegistro||'Oficial')==='Oficial'?'<span class="chip verde">Oficial</span>':'<span class="chip ambar">Borrador</span>'}</td>
+      <td style="white-space:nowrap"><button class="btn mini" data-editar-ot="${c.id}">✎</button> <button class="btn mini peligro" data-borrar-ot="${c.id}">🗑</button></td></tr>`;
+    }).join('')}
+  </table>` : '<div class="vacio">Sin documentos de mantenimiento correctivo. Usa el botón «🔩 Mantenimiento Correctivo» para crear una Orden de Trabajo, un Reporte de Servicio o un Envío a Servicio Técnico.</div>';
 }
 
 /* =====================================================================
@@ -1432,49 +1453,58 @@ function eliminarPendiente(){
 }
 
 /* =====================================================================
-   PASO 10 — FORMULARIO DE MANTENIMIENTO CORRECTIVO (Órdenes de Trabajo)
+   PASO 10 — FORMULARIO DE MANTENIMIENTO CORRECTIVO
+   (tipos de documento: Orden de Trabajo / Reporte de Servicio /
+    Envío a Servicio Técnico)
    ===================================================================== */
 let otEditando=null;
+/* Compatibilidad con documentos creados antes de la versión 3 de la especificación */
+const tipoDocDe = c => c.tipoDocumento || 'Orden de Trabajo';
+const estadoCorrectivoDe = v => v==='Servicio' ? 'Servicio Técnico' : (v||'Operativo');
 function abrirModalOT(equipoKey, ot){
   const e=equipoPorKey(equipoKey); if(!e) return;
   $('#ot-equipo-nombre').textContent = `${e.equipo} · Serie ${e.serie||'—'} · Inv. ${e.inventario||'—'}`;
-  /* Lista desplegable con las opciones de Orden de Trabajo del equipo (Paso 10) */
-  const ots = state.correctivos.filter(c=>c.equipoKey===equipoKey).sort((a,b)=>(b.fechaDocumento||'').localeCompare(a.fechaDocumento||''));
-  $('#ot-selector').innerHTML = '<option value="">➕ Nueva Orden de Trabajo</option>' +
-    ots.map(c=>`<option value="${c.id}">${esc(c.ordenTrabajo||'OT')} · Folio ${esc(c.folioSigem||'—')} · ${fmtFecha(c.fechaDocumento)}</option>`).join('');
-  $('#ot-selector').value = ot?ot.id:'';
   cargarFormOT(ot||null);
   $('#modal-ot').dataset.equipo=equipoKey;
   $('#modal-ot').classList.add('abierto');
 }
 function cargarFormOT(ot){
   otEditando = ot||null;
+  $('#ot-tipo-doc').value = ot?tipoDocDe(ot):'Orden de Trabajo';
   $('#ot-requerimiento').value = ot?(ot.requerimiento||''):'';
   $('#ot-fecha').value = ot?(ot.fechaDocumento||''):hoyISO();
   $('#ot-folio').value = ot?(ot.folioSigem||''):'';
   $('#ot-tecnico').value = ot?(ot.tecnico||''):'';
-  $('#ot-estado').value = ot?(ot.estadoEquipo||'Operativo'):'Operativo';
+  $('#ot-estado').value = ot?estadoCorrectivoDe(ot.estadoEquipo):'Operativo';
+  setToggle('ot-tipo-reg', ot?(ot.tipoRegistro||'Oficial'):'Oficial', CLASES_TIPO);
+  $('#ot-gestion').checked = ot?!!ot.gestionPendiente:false;
+  $('#ot-gestion-txt').textContent = $('#ot-gestion').checked?'Sí':'No';
   $('#ot-eliminar').style.display = ot?'':'none';
 }
 function guardarOT(){
   const equipoKey=$('#modal-ot').dataset.equipo;
-  const fecha=$('#ot-fecha').value, folio=$('#ot-folio').value.trim(), tec=$('#ot-tecnico').value;
-  if(!fecha||!folio||!tec){ toast('⚠️ Completa fecha del documento, Folio de Solicitud de SIGEM y técnico asignado.'); return; }
-  const datos={ equipoKey, requerimiento:$('#ot-requerimiento').value.trim(), fechaDocumento:fecha,
-    folioSigem:folio, tecnico:tec, estadoEquipo:$('#ot-estado').value||'Operativo' };
-  if(otEditando){ Object.assign(otEditando, datos, {actualizado:hoyISO()}); toast('✅ Orden de trabajo actualizada.'); }
-  else {
-    const n = state.correctivos.filter(c=>c.equipoKey===equipoKey).length+1;
-    state.correctivos.push(Object.assign({id:uid(), ordenTrabajo:'OT N° '+n, creado:hoyISO()}, datos));
-    toast('✅ Orden de trabajo creada.');
-  }
+  const tipoDoc=$('#ot-tipo-doc').value, fecha=$('#ot-fecha').value,
+        folio=$('#ot-folio').value.trim(), tec=$('#ot-tecnico').value;
+  if(!tipoDoc||!fecha||!folio||!tec){ toast('⚠️ Completa tipo de documento, fecha, Folio de Solicitud de SIGEM y técnico asignado.'); return; }
+  const datos={ equipoKey, tipoDocumento:tipoDoc, requerimiento:$('#ot-requerimiento').value.trim(),
+    fechaDocumento:fecha, folioSigem:folio, tecnico:tec,
+    estadoEquipo:$('#ot-estado').value||'Operativo',
+    gestionPendiente:$('#ot-gestion').checked,
+    tipoRegistro:valToggle('ot-tipo-reg')||'Oficial' };
+  const esNuevo = !otEditando;
+  if(otEditando){ Object.assign(otEditando, datos, {actualizado:hoyISO()}); toast('✅ Documento actualizado.'); }
+  else { state.correctivos.push(Object.assign({id:uid(), creado:hoyISO()}, datos)); toast('✅ '+tipoDoc+' guardado ('+datos.tipoRegistro+').'); }
   guardar(); cerrarModal('modal-ot'); otEditando=null; renderTodo();
+  /* Si quedó una gestión pendiente, abrir de inmediato el formulario de Pendientes */
+  if(datos.gestionPendiente && esNuevo){
+    abrirModalPendiente(equipoKey, null, {tipo:'Otro', descripcion:`Asociado a ${tipoDoc} folio ${folio} del ${fmtFecha(fecha)}.`});
+  }
 }
 function eliminarOT(){
   if(!otEditando) return;
-  if(!confirm('¿Eliminar esta orden de trabajo de mantenimiento correctivo?')) return;
+  if(!confirm('¿Eliminar este documento de mantenimiento correctivo?')) return;
   state.correctivos = state.correctivos.filter(c=>c.id!==otEditando.id);
-  guardar(); cerrarModal('modal-ot'); otEditando=null; renderTodo(); toast('🗑 Orden de trabajo eliminada.');
+  guardar(); cerrarModal('modal-ot'); otEditando=null; renderTodo(); toast('🗑 Documento eliminado.');
 }
 
 /* ---------- Vista global de pendientes ---------- */
@@ -1614,10 +1644,8 @@ function conectarEventos(){
   });
 
   /* Modal Mantenimiento Correctivo (Paso 10) */
-  $('#ot-selector').addEventListener('change',ev=>{
-    const c=state.correctivos.find(x=>x.id===ev.target.value);
-    cargarFormOT(c||null);
-  });
+  $('#ot-gestion').addEventListener('change',ev=>$('#ot-gestion-txt').textContent=ev.target.checked?'Sí':'No');
+  $$('#ot-tipo-reg button').forEach(b=>b.addEventListener('click',()=>setToggle('ot-tipo-reg',b.dataset.v,CLASES_TIPO)));
   $('#ot-guardar').addEventListener('click',guardarOT);
   $('#ot-eliminar').addEventListener('click',eliminarOT);
 
