@@ -473,6 +473,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
           </select>
         </div>
       </div>
+      <div id="mp-prog-hint"></div>
       <div class="f-2col">
         <div class="f-grupo">
           <label class="et">Ejecutor <span class="req">*</span></label>
@@ -1630,6 +1631,36 @@ const CLASES_ESTADO={'Operativo':'sel-verde','No Operativo':'sel-rojo'};
 const CLASES_TIPO={'Oficial':'sel-verde','Borrador':'sel-ambar'};
 function valToggle(grupoId){ const b=$$('#'+grupoId+' button').find(x=>x.className); return b?b.dataset.v:null; }
 
+function progDelMes(equipoKey, mes){
+  /* qué corresponde ese mes según la planilla: columna P del registro y programación PMP */
+  const e=equipoPorKey(equipoKey);
+  const reg=state.registros.find(r=>r.equipoKey===equipoKey && r.mes===mes && r.programa);
+  return { pmp:(e&&e.prog&&e.prog[mes])||'', reg:reg?reg.programa:'' };
+}
+function actualizarProgMP(){
+  const equipoKey=$('#modal-mp').dataset.equipo;
+  const fecha=$('#mp-fecha').value, h=$('#mp-prog-hint');
+  if(!equipoKey){ h.innerHTML=''; return; }
+  if(!fecha||!fecha.startsWith('2026')){ h.innerHTML = fecha?'<div class="aviso ambar">📅 La fecha no es de 2026: sin referencia de programación para ese mes.</div>':''; return; }
+  const mes=parseInt(fecha.slice(5,7),10)-1;
+  const p=progDelMes(equipoKey, mes);
+  const cod=p.reg||p.pmp;
+  const e=equipoPorKey(equipoKey);
+  if(cod){
+    h.innerHTML=`<div class="aviso">📅 <strong>${MESES[mes]} 2026</strong>: a este equipo le corresponde <strong>${cod} — ${esc(PROG_CODES[cod]||'')}</strong> según la planilla${(p.reg&&p.pmp&&p.reg!==p.pmp)?` <small>(PMP: ${p.pmp} · registro: ${p.reg})</small>`:''}.</div>`;
+  } else {
+    const mesesProg=(e&&e.prog)?Object.keys(e.prog).map(Number).sort((a,b)=>a-b).map(m=>MESES[m].slice(0,3)+' ('+e.prog[m]+')').join(' · '):'';
+    h.innerHTML=`<div class="aviso ambar">📅 <strong>${MESES[mes]} 2026</strong>: este mes <strong>no tiene programación</strong> para el equipo${mesesProg?'.<br><small>Meses programados: '+mesesProg+'</small>':' (sin programación 2026).'}<br><small>Si es el mes de destino de una reprogramación, corresponde registrar <strong>R</strong> (Paso 6).</small></div>`;
+  }
+  /* sugerir el código en Programación mientras el usuario no haya elegido manualmente */
+  if(!mpEditando){
+    const sel=$('#mp-programacion');
+    if(sel.dataset.auto!=='0'){
+      sel.value = cod||'';
+      sel.dataset.auto='1';
+    }
+  }
+}
 function abrirModalMP(equipoKey, registro){
   const e=equipoPorKey(equipoKey); if(!e) return;
   mpEditando = registro||null;
@@ -1645,8 +1676,10 @@ function abrirModalMP(equipoKey, registro){
   setToggle('mp-tipo', registro?registro.tipoRegistro:'Borrador', CLASES_TIPO);
   $('#mp-gestion').checked = registro?!!registro.gestionPendiente:false;
   $('#mp-gestion-txt').textContent = $('#mp-gestion').checked?'Sí':'No';
-  actualizarHintMP();
+  $('#mp-programacion').dataset.auto = registro?'0':'1';
   $('#modal-mp').dataset.equipo = equipoKey;
+  actualizarProgMP();
+  actualizarHintMP();
   $('#modal-mp').classList.add('abierto');
 }
 function actualizarHintMP(){
@@ -2601,10 +2634,11 @@ function conectarEventos(){
     if(b.dataset.mpf==='hoy') $('#mp-fecha').value=hoyISO();
     else if(b.dataset.mpf==='ayer') $('#mp-fecha').value=sumarDias(hoyISO(),-1);
     else if(b.dataset.mpf==='ultima' && prefs.ultimaFechaMP) $('#mp-fecha').value=prefs.ultimaFechaMP;
-    actualizarHintMP();
+    actualizarProgMP(); actualizarHintMP();
   });
   $('#mp-resultado').addEventListener('change',actualizarHintMP);
-  $('#mp-fecha').addEventListener('change',actualizarHintMP);
+  $('#mp-fecha').addEventListener('change',()=>{ actualizarProgMP(); actualizarHintMP(); });
+  $('#mp-programacion').addEventListener('change',()=>{ $('#mp-programacion').dataset.auto='0'; });
   $('#mp-gestion').addEventListener('change',ev=>$('#mp-gestion-txt').textContent=ev.target.checked?'Sí':'No');
   $$('#mp-estado button').forEach(b=>b.addEventListener('click',()=>setToggle('mp-estado',b.dataset.v,CLASES_ESTADO)));
   $$('#mp-tipo button').forEach(b=>b.addEventListener('click',()=>setToggle('mp-tipo',b.dataset.v,CLASES_TIPO)));
