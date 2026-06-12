@@ -830,7 +830,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-12.14';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-12.15';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -934,6 +934,7 @@ function hoyISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMo
 function sumarDias(iso,n){ const d=new Date(iso+'T12:00:00'); d.setDate(d.getDate()+n); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function fmtFecha(iso){ if(!iso) return '—'; const p=iso.split('-'); return p.length===3 ? p[2]+'-'+p[1]+'-'+p[0] : iso; }
 function diasEntre(a,b){ return Math.round((new Date(b+'T12:00:00') - new Date(a+'T12:00:00'))/86400000); }
+function debounce(fn,ms){ let t; return function(){ clearTimeout(t); t=setTimeout(fn,ms); }; }
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('ver'); clearTimeout(t._tm); t._tm=setTimeout(()=>t.classList.remove('ver'),2800); }
 function copiarTexto(txt){
   const ok=()=>toast('📋 Copiado: '+txt);
@@ -1769,7 +1770,7 @@ function renderDetalle(key){
     : estadoActual==='Servicio Técnico'
       ? '<span class="chip ambar">🔧 Servicio Técnico</span>'
       : '<span class="chip rojo">✖ No Operativo</span>');
-  chips.push(`<span class="chip gris">Identificador: ${esc(key)}</span>`);
+  chips.push(`<span class="chip gris" data-copiar="${esc(key)}" style="cursor:copy" title="Clic para copiar">Identificador: ${esc(key)}</span>`);
   $('#det-chips').innerHTML = chips.join('');
   $('#det-campos').innerHTML = CAMPOS.map(c=>`<div class="campo-box" title="Clic para copiar"><label>${esc(c.l)}</label><div>${esc(e[c.k])||'—'}</div></div>`).join('');
 
@@ -2915,7 +2916,7 @@ function conectarEventos(){
   $('#input-respaldo').addEventListener('change',ev=>{ if(ev.target.files[0]) restaurarRespaldo(ev.target.files[0]); ev.target.value=''; });
 
   /* Tabla de equipos */
-  $('#busqueda-global').addEventListener('input',ev=>{ busqueda=ev.target.value; pagina=0; invalidar(); renderTabla(); });
+  $('#busqueda-global').addEventListener('input', debounce(()=>{ busqueda=$('#busqueda-global').value; pagina=0; invalidar(); renderTabla(); },180));
   $('#busqueda-global').addEventListener('keydown',ev=>{
     if(ev.key!=='Enter') return;
     const filas=filasVisibles();
@@ -2941,7 +2942,7 @@ function conectarEventos(){
   });
 
   /* Plan de Mantenimiento */
-  $('#busqueda-plan').addEventListener('input',ev=>{ busquedaPlan=ev.target.value; paginaPlan=0; cachePlanFil=null; renderPlan(); });
+  $('#busqueda-plan').addEventListener('input', debounce(()=>{ busquedaPlan=$('#busqueda-plan').value; paginaPlan=0; cachePlanFil=null; renderPlan(); },180));
   $('#btn-limpiar-plan').addEventListener('click',()=>{
     filtrosPlan={}; ordenPlan={k:null,dir:1}; busquedaPlan=''; $('#busqueda-plan').value=''; paginaPlan=0; cachePlanFil=null; renderPlan();
   });
@@ -2963,6 +2964,8 @@ function conectarEventos(){
   $('#btn-abrir-pendiente').addEventListener('click',()=>abrirModalPendiente(detalleKey,null,null));
   $('#btn-abrir-ot').addEventListener('click',()=>abrirModalOT(detalleKey,null));
   $('#vista-detalle').addEventListener('click',ev=>{
+    const cp=ev.target.closest('[data-copiar]');
+    if(cp){ copiarTexto(cp.dataset.copiar); return; }
     const cb=ev.target.closest('#det-campos .campo-box');
     if(cb){
       const val=(cb.querySelector('div')||{}).textContent.trim();
