@@ -168,6 +168,24 @@ table.lista tr.click:hover td{background:var(--azul-claro)}
 .tarea .quitar{margin-left:auto;border:none;background:none;color:var(--gris-4);font-size:1rem;padding:2px 6px;border-radius:5px}
 .tarea .quitar:hover{color:var(--rojo);background:#fff}
 .sub-form{border:1px dashed var(--gris-3);border-left:4px solid var(--azul);background:var(--gris-1);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:12px}
+
+/* ---------- Expedientes correctivos (línea de tiempo) ---------- */
+.expediente{border:1px solid var(--gris-2);border-radius:10px;padding:12px 14px;margin-bottom:12px;background:#fff}
+.expediente.critico{border-color:#e8a9a7;background:#fffafa;box-shadow:inset 4px 0 0 var(--rojo)}
+.exp-cab{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;font-size:.9rem}
+.exp-cab .dias{margin-left:auto;font-weight:700;font-size:.85rem;white-space:nowrap}
+.exp-cab .dias.rojo{color:var(--rojo)}
+.linea-tiempo{display:flex;align-items:flex-start;overflow-x:auto;padding:4px 2px 2px}
+.lt-nodo{display:flex;flex-direction:column;align-items:center;text-align:center;min-width:88px;gap:2px}
+.lt-nodo .lt-punto{width:13px;height:13px;border-radius:50%;background:var(--verde);box-shadow:0 0 0 3px var(--verde-bg)}
+.lt-nodo.pend .lt-punto{background:var(--gris-3);box-shadow:0 0 0 3px var(--gris-1)}
+.lt-nodo strong{font-size:.7rem;line-height:1.15}
+.lt-nodo.pend strong{color:var(--gris-4);font-weight:600}
+.lt-nodo small{font-size:.68rem;color:var(--gris-4);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lt-seg{flex:1;min-width:34px;display:flex;flex-direction:column;align-items:center;padding-top:5px;gap:2px}
+.lt-seg i{display:block;height:3px;width:100%;background:var(--verde);border-radius:2px}
+.lt-seg.pend i{background:var(--gris-2)}
+.lt-seg span{font-size:.66rem;color:var(--gris-4);white-space:nowrap}
 .log-gestion{display:flex;flex-direction:column;gap:8px;max-height:180px;overflow:auto;margin-bottom:8px}
 .log-item{background:var(--gris-1);border-left:3px solid var(--azul);border-radius:0 7px 7px 0;padding:7px 11px;font-size:.85rem}
 .log-item time{display:block;font-size:.72rem;color:var(--gris-4);margin-bottom:2px}
@@ -739,6 +757,7 @@ const sinAcentos = s => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,''
 function hoyISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function sumarDias(iso,n){ const d=new Date(iso+'T12:00:00'); d.setDate(d.getDate()+n); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function fmtFecha(iso){ if(!iso) return '—'; const p=iso.split('-'); return p.length===3 ? p[2]+'-'+p[1]+'-'+p[0] : iso; }
+function diasEntre(a,b){ return Math.round((new Date(b+'T12:00:00') - new Date(a+'T12:00:00'))/86400000); }
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('ver'); clearTimeout(t._tm); t._tm=setTimeout(()=>t.classList.remove('ver'),2800); }
 
 function chipPrograma(c){
@@ -1004,6 +1023,9 @@ function renderResumen(){
   const conRes = state.registros.filter(r=>r.resultado);
   const realizadas = conRes.filter(r=>r.resultado==='Si'||r.resultado==='Si-RA').length;
   const reprog = conRes.filter(r=>/^C[1-8]$/.test(r.resultado)).length;
+  /* Flujo correctivo: OTs abiertas y equipos detenidos */
+  const otsAbiertas = state.correctivos.filter(c=>tipoEventoDe(c)==='Orden de Trabajo' && estadoEventoDe(c)==='Abierto');
+  const eqDetenidos = [...new Set(otsAbiertas.filter(equipoDetenidoEn).map(c=>c.equipoKey))];
   const kpis = [
     [state.equipos.length,'Equipos cargados'],
     [progTotal,'Mantenciones programadas 2026'],
@@ -1013,10 +1035,18 @@ function renderResumen(){
     [state.meta.oficializados,'Borradores actualizados a Oficial'],
     [state.manuales.length,'Registros creados en la app'],
     [state.pendientes.filter(p=>p.estado!=='Completado').length,'Pendientes abiertos'],
-    [state.correctivos.length,'Eventos de mant. correctivo']
+    [state.correctivos.length,'Eventos de mant. correctivo'],
+    [otsAbiertas.length,'OTs correctivas abiertas'],
+    [eqDetenidos.length,'Equipos detenidos (OT abierta)']
   ];
   $('#resumen-kpis').innerHTML = kpis.map(k=>`<div class="kpi"><b>${k[0]}</b><span>${k[1]}</span></div>`).join('');
   $('#resumen-avisos').innerHTML =
+    (eqDetenidos.length?`<div class="aviso rojo">🔴 <strong>Equipos detenidos con OT abierta:</strong> ${eqDetenidos.map(k=>{
+      const e=equipoPorKey(k);
+      const ot=otsAbiertas.filter(c=>c.equipoKey===k && c.fechaDocumento).sort((a,b)=>a.fechaDocumento.localeCompare(b.fechaDocumento))[0];
+      const dias=ot?diasEntre(ot.fechaDocumento,hoyISO()):'—';
+      return `<a href="#" data-det-eq="${esc(k)}" style="font-weight:600">${esc(e?e.equipo:k)}${e&&e.serie?' ('+esc(e.serie)+')':''}</a> — ${dias} días`;
+    }).join(' · ')}</div>`:'') +
     (state.meta.ejemplo?'<div class="aviso ambar">⚠️ Estás trabajando con <strong>datos de ejemplo</strong>. Carga la planilla real para reemplazarlos.</div>':'') +
     (state.meta.oficializados?`<div class="aviso verde">✔ ${state.meta.oficializados} registro(s) en Borrador se actualizaron a <strong>Oficial</strong> porque la mantención aparece en la planilla recargada.</div>`:'') +
     (state.meta.avisos||[]).map(a=>`<div class="aviso ambar">⚠️ ${esc(a)}</div>`).join('');
@@ -1361,8 +1391,8 @@ function renderDetalle(key){
   const pendEq = state.pendientes.filter(p=>p.equipoKey===key);
   $('#det-pendientes').innerHTML = pendEq.length ? tablaPendientes(pendEq) : '<div class="vacio">Sin pendientes para este equipo. Usa el botón «📋 Pendientes» para crear uno.</div>';
 
-  /* Eventos de mantenimiento correctivo (Paso 10) */
-  $('#det-correctivos').innerHTML = otsEq.length ? `<div style="overflow:auto"><table class="lista">
+  /* Eventos de mantenimiento correctivo (Paso 10): expedientes + detalle */
+  $('#det-correctivos').innerHTML = otsEq.length ? renderExpedientesHTML(otsEq) + `<h3>Detalle de eventos</h3><div style="overflow:auto"><table class="lista">
     <tr><th>Tipo de evento</th><th>Fecha doc.</th><th>Folio SIGEM</th><th>Requerimiento</th><th>Técnico asignado</th><th>Compra</th><th>Estado equipo</th><th>Evento</th><th>Registro</th><th></th></tr>
     ${otsEq.map(c=>{
       const est = estadoCorrectivoDe(c.estadoEquipo);
@@ -1542,6 +1572,77 @@ let otEditando=null;
 const tipoEventoDe = c => c.tipoEvento || c.tipoDocumento || 'Orden de Trabajo';
 const estadoCorrectivoDe = v => v==='Servicio' ? 'Servicio Técnico' : (v||'Operativo');
 const estadoEventoDe = c => c.estadoEvento || 'Abierto';
+
+/* --- Núcleo de expedientes (línea de tiempo del flujo correctivo) --- */
+const equipoDetenidoEn = c => { const e=estadoCorrectivoDe(c.estadoEquipo); return e==='No Operativo'||e==='Servicio Técnico'; };
+function expedientesDe(eventos){
+  /* Un folio SIGEM agrupa la OT con sus Reportes de Servicio y Envíos a ST (un expediente) */
+  const grupos=new Map();
+  eventos.forEach(c=>{
+    const k=(c.folioSigem||'').trim()||('·sin-folio·'+c.id);
+    if(!grupos.has(k)) grupos.set(k,[]);
+    grupos.get(k).push(c);
+  });
+  return [...grupos.entries()].map(([folio,evs])=>({folio, evs:evs.slice().sort((a,b)=>(a.fechaDocumento||'').localeCompare(b.fechaDocumento||''))}));
+}
+function nodosExpediente(exp){
+  const ot = exp.evs.find(c=>tipoEventoDe(c)==='Orden de Trabajo') || exp.evs[0];
+  const otros = exp.evs.filter(c=>c!==ot);
+  const cerrado = estadoEventoDe(ot)==='Cerrado';
+  const n=[{et:'Apertura', sub:tipoEventoDe(ot), fecha:ot.fechaDocumento||'', done:true}];
+  const hayInf = !!(ot.informeTecnicoFecha||ot.informeTecnicoNum);
+  const hayOC  = !!(ot.ordenCompraFecha||ot.ordenCompraNum);
+  if(hayInf) n.push({et:'Informe técnico', sub:ot.informeTecnicoNum?('N° '+ot.informeTecnicoNum):'', fecha:ot.informeTecnicoFecha||'', done:true});
+  else if(!cerrado) n.push({et:'Informe técnico', sub:'', fecha:'', done:false});
+  if(hayOC) n.push({et:'OC emitida', sub:ot.ordenCompraNum||'', fecha:ot.ordenCompraFecha||'', done:true});
+  else if(!cerrado) n.push({et:'Orden de compra', sub:'', fecha:'', done:false});
+  if(otros.length) otros.forEach(r=>n.push({et:tipoEventoDe(r)==='Envío a Servicio Técnico'?'Envío a ST':'Ejecución', sub:tipoEventoDe(r), fecha:r.fechaDocumento||'', done:true}));
+  else if(!cerrado) n.push({et:'Ejecución', sub:'', fecha:'', done:false});
+  n.push(cerrado ? {et:'Cierre', sub:'', fecha:ot.fechaCierre||'', done:true} : {et:'Cierre', sub:'', fecha:'', done:false});
+  const critico = equipoDetenidoEn(ot);
+  const dias = ot.fechaDocumento ? diasEntre(ot.fechaDocumento, cerrado ? (ot.fechaCierre||ot.fechaDocumento) : hoyISO()) : 0;
+  return {ot, folio:exp.folio, nodos:n, cerrado, critico, dias};
+}
+function etapaActualDe(x){
+  if(x.cerrado) return 'Cerrada';
+  if(x.nodos.some(n=>n.done && (n.et==='Ejecución'||n.et==='Envío a ST'))) return 'Ejecutada · por cerrar';
+  if(x.ot.ordenCompraNum||x.ot.ordenCompraFecha) return 'OC emitida · en espera del proveedor';
+  if(x.ot.informeTecnicoFecha||x.ot.informeTecnicoNum) return 'Informe emitido · por emitir OC';
+  return 'En evaluación / cotización';
+}
+/* --- fin núcleo de expedientes --- */
+
+function renderExpedientesHTML(otsEq){
+  const exps = expedientesDe(otsEq).map(nodosExpediente);
+  exps.sort((a,b)=>{
+    if(a.cerrado!==b.cerrado) return a.cerrado?1:-1;                 // abiertos primero
+    if(a.critico!==b.critico) return a.critico?-1:1;                 // críticos antes
+    return (b.ot.fechaDocumento||'').localeCompare(a.ot.fechaDocumento||'');
+  });
+  return '<h3>Expedientes por folio SIGEM · flujo del correctivo</h3>' + exps.map(x=>{
+    const abiertoCritico = x.critico && !x.cerrado;
+    const estadoChip = x.cerrado ? '<span class="chip verde">Cerrado</span>'
+      : abiertoCritico ? '<span class="chip rojo">🔴 Detenido</span>' : '<span class="chip azul">Abierto</span>';
+    const etapa = `<span class="chip ${x.cerrado?'gris':'cian'}">${esc(etapaActualDe(x))}</span>`;
+    const dias = x.cerrado
+      ? `<span class="dias">${x.critico?'Detención':'Ciclo'}: ${x.dias} días</span>`
+      : `<span class="dias ${abiertoCritico?'rojo':''}">${abiertoCritico?'🔴 Detenido hace':'⏱ Abierta hace'} ${x.dias} días</span>`;
+    let html='', prevFecha=x.nodos[0].fecha, prevDone=true;
+    x.nodos.forEach((n,i)=>{
+      if(i>0){
+        const ambos = prevDone && n.done && prevFecha && n.fecha;
+        html += `<div class="lt-seg ${ambos?'':'pend'}"><i></i>${ambos?`<span>+${diasEntre(prevFecha,n.fecha)} días</span>`:''}</div>`;
+      }
+      html += `<div class="lt-nodo ${n.done?'':'pend'}"><div class="lt-punto"></div><strong>${esc(n.et)}</strong><small>${n.done?fmtFecha(n.fecha):'pendiente'}</small>${n.sub?`<small>${esc(n.sub)}</small>`:''}</div>`;
+      if(n.done && n.fecha){ prevFecha=n.fecha; }
+      prevDone=n.done;
+    });
+    return `<div class="expediente ${abiertoCritico?'critico':''}">
+      <div class="exp-cab"><strong>Folio ${esc(x.folio.startsWith('·sin-folio·')?'(sin folio)':x.folio)}</strong>${estadoChip}${etapa}${dias}</div>
+      <div class="linea-tiempo">${html}</div>
+    </div>`;
+  }).join('');
+}
 function abrirModalOT(equipoKey, ot){
   const e=equipoPorKey(equipoKey); if(!e) return;
   $('#ot-equipo-nombre').textContent = `${e.equipo} · Serie ${e.serie||'—'} · Inv. ${e.inventario||'—'}`;
@@ -1713,6 +1814,10 @@ function conectarEventos(){
   ;['dragenter','dragover'].forEach(t=>zona.addEventListener(t,ev=>{ev.preventDefault();zona.classList.add('sobre');}));
   ;['dragleave','drop'].forEach(t=>zona.addEventListener(t,ev=>{ev.preventDefault();zona.classList.remove('sobre');}));
   zona.addEventListener('drop',ev=>{ const f=ev.dataTransfer.files[0]; if(f) cargarArchivo(f); });
+  $('#resumen-avisos').addEventListener('click',ev=>{
+    const a=ev.target.closest('[data-det-eq]');
+    if(a){ ev.preventDefault(); abrirDetalle(a.dataset.detEq); }
+  });
   $('#btn-borrar-todo').addEventListener('click',()=>{
     if(!confirm('Esto eliminará TODOS los datos almacenados en este navegador (planilla cargada, registros de la app y pendientes). ¿Continuar?')) return;
     localStorage.removeItem(LS_DATOS); localStorage.removeItem(LS_USUARIO);
