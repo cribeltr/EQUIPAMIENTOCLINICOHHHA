@@ -603,9 +603,17 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
         <label class="et"><span id="ot-req-label">Requerimiento</span> <span style="color:var(--gris-4);font-weight:400">(opcional)</span></label>
         <input type="text" id="ot-requerimiento" placeholder="Describe el requerimiento del documento…">
       </div>
-      <div class="f-grupo" id="ot-env-empresa-grupo" style="display:none">
-        <label class="et">Empresa <span class="req">*</span></label>
-        <select id="ot-env-empresa"></select>
+      <div id="ot-env-grupo" style="display:none">
+        <div class="f-2col">
+          <div class="f-grupo">
+            <label class="et">Empresa <span class="req">*</span></label>
+            <select id="ot-env-empresa"></select>
+          </div>
+          <div class="f-grupo">
+            <label class="et">N° de envío <span class="req">*</span></label>
+            <input type="text" id="ot-env-numero" placeholder="N° del documento de envío">
+          </div>
+        </div>
       </div>
       <div class="f-2col">
         <div class="f-grupo">
@@ -1431,10 +1439,10 @@ function exportarTodo(){
     [{wch:28},{wch:16},{wch:14},{wch:32},{wch:15},{wch:36},{wch:44},{wch:24},{wch:24},{wch:11},{wch:54},{wch:11}]), 'Pendientes');
 
   /* Hoja 5: Correctivos — eventos del Paso 10 (OT / Reporte / Envío a ST) */
-  const filasC = [['Equipo','Serie','N° Inventario','Servicio','Tipo de evento','Requerimiento','Fecha documento','Folio Solicitud SIGEM','Técnico asignado','Estado del equipo','Tipo de compra','N° informe técnico','Fecha informe técnico','Responsable informe técnico','Empresa','N° orden de compra','Fecha orden de compra','Descripción orden de compra','Estado evento','Fecha cierre','Bitácora de avances','Gestión pendiente','Tipo registro','Creado']];
+  const filasC = [['Equipo','Serie','N° Inventario','Servicio','Tipo de evento','Requerimiento','Fecha documento','Folio Solicitud SIGEM','N° de envío','Técnico asignado','Estado del equipo','Tipo de compra','N° informe técnico','Fecha informe técnico','Responsable informe técnico','Empresa','N° orden de compra','Fecha orden de compra','Descripción orden de compra','Estado evento','Fecha cierre','Bitácora de avances','Gestión pendiente','Tipo registro','Creado']];
   state.correctivos.slice().sort((a,b)=>(a.fechaDocumento||'').localeCompare(b.fechaDocumento||'')).forEach(c=>{
     filasC.push([eqCampo(c.equipoKey,'equipo'),eqCampo(c.equipoKey,'serie'),eqCampo(c.equipoKey,'inventario'),eqCampo(c.equipoKey,'servicio'),
-      tipoEventoDe(c), c.requerimiento||'', fmtFecha(c.fechaDocumento), c.folioSigem||'',
+      tipoEventoDe(c), c.requerimiento||'', fmtFecha(c.fechaDocumento), c.folioSigem||'', c.numeroEnvio||'',
       c.tecnico||'', estadoCorrectivoDe(c.estadoEquipo),
       c.tipoCompra||'', c.informeTecnicoNum||'', c.informeTecnicoFecha?fmtFecha(c.informeTecnicoFecha):'',
       c.informeTecnicoResp||'', c.empresa||'', c.ordenCompraNum||'',
@@ -1444,7 +1452,7 @@ function exportarTodo(){
       c.gestionPendiente?'Sí':'No', c.tipoRegistro||'Oficial', fmtFecha(c.creado)]);
   });
   XLSX.utils.book_append_sheet(wb, hojaTexto(filasC,
-    [{wch:28},{wch:16},{wch:14},{wch:18},{wch:24},{wch:36},{wch:15},{wch:18},{wch:24},{wch:16},{wch:14},{wch:16},{wch:16},{wch:24},{wch:26},{wch:18},{wch:16},{wch:50},{wch:12},{wch:12},{wch:50},{wch:9},{wch:12},{wch:11}]), 'Correctivos');
+    [{wch:28},{wch:16},{wch:14},{wch:18},{wch:24},{wch:36},{wch:15},{wch:18},{wch:14},{wch:24},{wch:16},{wch:14},{wch:16},{wch:16},{wch:24},{wch:26},{wch:18},{wch:16},{wch:50},{wch:12},{wch:12},{wch:50},{wch:9},{wch:12},{wch:11}]), 'Correctivos');
 
   XLSX.writeFile(wb, 'Registros_GMP2026_'+hoyISO()+'.xlsx');
   toast('⬇ Excel completo descargado: Equipos, Programación, Mantenciones, Pendientes y Correctivos.');
@@ -1604,7 +1612,7 @@ function renderDetalle(key){
       <td><strong>${esc(tipoEventoDe(c))}</strong></td>
       <td>${fmtFecha(c.fechaDocumento)}</td>
       <td>${esc(c.folioSigem)||'—'}</td>
-      <td style="max-width:240px">${esc(c.requerimiento)||'—'}${tipoEventoDe(c)==='Envío a Servicio Técnico'&&c.empresa?'<br><small style="color:var(--gris-4)">Enviado a: '+esc(c.empresa)+'</small>':''}${c.gestionPendiente?'<br><span class="chip ambar">Gestión pendiente</span>':''}</td>
+      <td style="max-width:240px">${esc(c.requerimiento)||'—'}${tipoEventoDe(c)==='Envío a Servicio Técnico'&&(c.empresa||c.numeroEnvio)?'<br><small style="color:var(--gris-4)">Enviado a: '+esc(c.empresa||'—')+(c.numeroEnvio?' · Envío N° '+esc(c.numeroEnvio):'')+'</small>':''}${c.gestionPendiente?'<br><span class="chip ambar">Gestión pendiente</span>':''}</td>
       <td>${esc(c.tecnico)}</td>
       <td style="max-width:260px">${compra}</td>
       <td>${est==='Operativo'?'<span class="chip verde">Operativo</span>':est==='Servicio Técnico'?'<span class="chip ambar">Servicio Técnico</span>':'<span class="chip rojo">No Operativo</span>'}</td>
@@ -2235,7 +2243,7 @@ function ajustarFormOTSegunTipo(){
   $('#ot-folio-label').textContent = esEnvio?'Folio de solicitud':'Folio de Solicitud de SIGEM';
   $('#ot-tecnico-label').textContent = esEnvio?'Técnico responsable':'Técnico asignado';
   $('#ot-requerimiento').placeholder = esEnvio?'Describe el envío: falla, accesorios incluidos, condiciones…':'Describe el requerimiento del documento…';
-  $('#ot-env-empresa-grupo').style.display = esEnvio?'':'none';
+  $('#ot-env-grupo').style.display = esEnvio?'':'none';
 }
 function cargarFormOT(ot){
   otEditando = ot||null;
@@ -2246,6 +2254,7 @@ function cargarFormOT(ot){
   $('#ot-tecnico').value = ot?(ot.tecnico||''):'';
   $('#ot-estado').value = ot?estadoCorrectivoDe(ot.estadoEquipo):'Operativo';
   $('#ot-env-empresa').innerHTML = opcionesEmpresas(ot?(ot.empresa||''):'');
+  $('#ot-env-numero').value = ot?(ot.numeroEnvio||''):'';
   ajustarFormOTSegunTipo();
   $('#ot-compra').value = ot?(ot.tipoCompra||''):'';
   $('#ot-informe-num').value = ot?(ot.informeTecnicoNum||''):'';
@@ -2269,11 +2278,12 @@ function guardarOT(){
   const tipoEvento=$('#ot-tipo-evento').value, fecha=$('#ot-fecha').value,
         folio=$('#ot-folio').value.trim(), tec=$('#ot-tecnico').value;
   if(!tipoEvento||!fecha||!folio||!tec){ toast('⚠️ Completa tipo de evento, fecha, folio de solicitud y técnico.'); return; }
-  /* Envío a Servicio Técnico exige la empresa de destino */
-  let empresaEnvio='';
+  /* Envío a Servicio Técnico exige la empresa de destino y el N° de envío */
+  let empresaEnvio='', numeroEnvio='';
   if(tipoEvento==='Envío a Servicio Técnico'){
     empresaEnvio=$('#ot-env-empresa').value==='__nueva__'?'':$('#ot-env-empresa').value;
-    if(!empresaEnvio){ toast('⚠️ Indica la empresa a la que se envía el equipo.'); return; }
+    numeroEnvio=$('#ot-env-numero').value.trim();
+    if(!empresaEnvio||!numeroEnvio){ toast('⚠️ Indica la empresa de destino y el N° de envío.'); return; }
   }
   /* Tipo de compra: Trato Directo exige informe técnico (n°, fecha, responsable) y empresa */
   const tipoCompra=$('#ot-compra').value;
@@ -2296,7 +2306,7 @@ function guardarOT(){
   const fechaCierre = estadoEvento==='Cerrado' ? $('#ot-cierre-fecha').value : '';
   if(estadoEvento==='Cerrado' && !fechaCierre){ toast('⚠️ Indica la fecha de cierre del evento.'); return; }
   const datos={ equipoKey, tipoEvento, requerimiento:$('#ot-requerimiento').value.trim(),
-    fechaDocumento:fecha, folioSigem:folio, tecnico:tec,
+    fechaDocumento:fecha, folioSigem:folio, tecnico:tec, numeroEnvio,
     estadoEquipo:$('#ot-estado').value||'Operativo',
     tipoCompra, informeTecnicoNum:informeNum, informeTecnicoFecha:informeFecha,
     informeTecnicoResp:informeResp, empresa, ordenCompraNum, ordenCompraFecha, ordenCompraDesc,
