@@ -126,11 +126,6 @@ table.equipos tbody tr:hover td{background:var(--azul-claro)}
 .campo-box:hover{border-color:var(--azul)}
 .campo-box label{display:block;font-size:.7rem;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-4);margin-bottom:2px}
 .campo-box div{font-size:.92rem;font-weight:600;word-break:break-word}
-.grid-meses{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px}
-.mes-box{border:1px solid var(--gris-2);border-radius:8px;padding:8px 10px;background:#fff;min-height:74px}
-.mes-box.con-prog{border-color:var(--azul);background:var(--azul-claro)}
-.mes-box h4{font-size:.74rem;text-transform:uppercase;color:var(--gris-4);margin-bottom:5px}
-.mes-box .codigos{display:flex;flex-direction:column;gap:4px;align-items:flex-start}
 table.lista{width:100%;border-collapse:collapse;font-size:.86rem}
 table.lista th{text-align:left;padding:8px 10px;background:var(--gris-1);color:var(--gris-4);font-size:.74rem;text-transform:uppercase;letter-spacing:.4px;border-bottom:2px solid var(--gris-2)}
 table.lista td{padding:8px 10px;border-bottom:1px solid var(--gris-2);vertical-align:top}
@@ -400,14 +395,8 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
   </div>
 
   <div class="card">
-    <h2>Programación y resultados 2026</h2>
-    <p class="sub">Programación según hoja PMP_2026 y resultados según hoja Registro_MP-2026.</p>
-    <div class="grid-meses" id="det-meses"></div>
-    <div id="det-obs-planilla"></div>
-  </div>
-
-  <div class="card">
     <h2>Historial de mantenciones</h2>
+    <div id="det-obs-planilla"></div>
     <div id="det-historial"></div>
   </div>
 
@@ -827,7 +816,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-12.16';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-12.17';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -1772,23 +1761,8 @@ function renderDetalle(key){
   $('#det-chips').innerHTML = chips.join('');
   $('#det-campos').innerHTML = CAMPOS.map(c=>`<div class="campo-box" title="Clic para copiar"><label>${esc(c.l)}</label><div>${esc(e[c.k])||'—'}</div></div>`).join('');
 
-  /* Programación + resultados por mes */
   const regsEq = state.registros.filter(r=>r.equipoKey===key);
-  $('#det-meses').innerHTML = MESES.map((nom,m)=>{
-    const prog = e.prog ? e.prog[m] : '';
-    const regs = regsEq.filter(r=>r.mes===m);
-    const manuales = manualesEq.filter(x=>x.fecha && x.fecha.startsWith('2026') && parseInt(x.fecha.slice(5,7),10)-1===m);
-    const partes=[];
-    if(prog) partes.push('<div>'+chipPrograma(prog)+' <small style="color:var(--gris-4)">programación</small></div>');
-    regs.forEach(r=>{
-      partes.push('<div>'+ (r.programa?chipPrograma(r.programa)+' ':'') + chipResultado(r.resultado) +'</div>');
-    });
-    manuales.forEach(x=>{
-      partes.push('<div title="Registro creado en la aplicación">'+chipResultado(x.resultado)+` <small style="color:var(--gris-4)">${x.tipoRegistro==='Borrador'?'borrador':'app'}</small></div>`);
-    });
-    return `<div class="mes-box ${prog||regs.length?'con-prog':''}"><h4>${nom}</h4><div class="codigos">${partes.join('')||'<small style="color:var(--gris-3)">—</small>'}</div></div>`;
-  }).join('');
-  $('#det-obs-planilla').innerHTML = e.regObs ? `<div class="aviso" style="margin-top:14px"><strong>Observación (planilla, col. AR):</strong> ${esc(e.regObs)}</div>` : '';
+  $('#det-obs-planilla').innerHTML = e.regObs ? `<div class="aviso" style="margin-bottom:12px"><strong>Observación (planilla, col. AR):</strong> ${esc(e.regObs)}</div>` : '';
 
   /* Historial de mantenciones: UNA fila por mes, planilla + app unificadas
      (el mes viene de la planilla; la app aporta fecha de ejecución, ejecutor y detalle) */
