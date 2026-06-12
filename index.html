@@ -572,7 +572,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
         <select id="ot-tipo-evento">
           <option value="Orden de Trabajo">Orden de Trabajo</option>
           <option value="Reporte de Servicio">Reporte de Servicio</option>
-          <option value="Envío a Servicio Técnico">Envío a Servicio Técnico</option>
+          <option value="Envío a Servicio Técnico" disabled hidden>Envío a Servicio Técnico (ahora es un avance del expediente)</option>
         </select>
       </div>
       <div class="f-grupo">
@@ -712,6 +712,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
             <option>Informe técnico emitido</option>
             <option>OC emitida</option>
             <option>OC enviada a proveedor</option>
+            <option>Envío a Servicio Técnico</option>
             <option>Visita / Ejecución realizada</option>
             <option>Cierre del expediente</option>
             <option>Otro avance</option>
@@ -746,6 +747,8 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    Implementación del flujo de trabajo (Pasos 1 a 9) de la
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
+
+const APP_BUILD = '2026-06-12.11';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -1424,7 +1427,10 @@ function exportarTodo(){
       c.informeTecnicoResp||'', c.empresa||'', c.ordenCompraNum||'',
       c.ordenCompraFecha?fmtFecha(c.ordenCompraFecha):'', c.ordenCompraDesc||'',
       estadoEventoDe(c), c.fechaCierre?fmtFecha(c.fechaCierre):'',
-      (c.avances||[]).map(a=>fmtFecha(a.fecha)+' — '+a.tipo+(a.detalle?': '+a.detalle:'')).join('\n'),
+      (c.avances||[]).map(a=>{
+        const ex=[a.detalle||'', a.informeNum?'Informe N° '+a.informeNum:'', a.ocNum?'OC '+a.ocNum:'', a.numeroEnvio?'Envío N° '+a.numeroEnvio+(a.empresa?' a '+a.empresa:''):'', a.estadoEquipoVisita?'Equipo '+a.estadoEquipoVisita:'', a.estadoEquipoCierre?'Equipo '+a.estadoEquipoCierre+' al cierre':''].filter(Boolean).join(' · ');
+        return fmtFecha(a.fecha)+' — '+a.tipo+(ex?': '+ex:'');
+      }).join('\n'),
       c.gestionPendiente?'Sí':'No', c.tipoRegistro||'Oficial', fmtFecha(c.creado)]);
   });
   XLSX.utils.book_append_sheet(wb, hojaTexto(filasC,
@@ -1820,6 +1826,7 @@ function hitosExpediente(ot, fechasEjecucion){
   if(ot.informeTecnicoFecha) h.push(['Informe técnico', ot.informeTecnicoFecha]);
   if(ot.ordenCompraFecha) h.push(['OC emitida', ot.ordenCompraFecha]);
   if(fEnv) h.push(['OC enviada', fEnv]);
+  (ot.avances||[]).filter(a=>a.tipo==='Envío a Servicio Técnico' && a.fecha).forEach(a=>h.push(['Envío a ST', a.fecha]));
   (fechasEjecucion||[]).forEach(f=>h.push(['Ejecución', f]));
   (ot.avances||[]).filter(a=>a.tipo==='Visita / Ejecución realizada' && a.fecha).forEach(a=>h.push(['Ejecución', a.fecha]));
   if(ot.fechaCierre) h.push(['Cierre', ot.fechaCierre]);
@@ -1853,6 +1860,7 @@ function nodosExpediente(exp){
     if(a.tipo==='Cotización solicitada') hechos.push({et:'Cotización solicitada', sub:'', fecha:a.fecha||'', done:true});
     else if(a.tipo==='Cotización recibida') hechos.push({et:'Cotización recibida', sub:'', fecha:a.fecha||'', done:true});
     else if(a.tipo==='OC enviada a proveedor') hechos.push({et:'OC enviada', sub:'', fecha:a.fecha||'', done:true});
+    else if(a.tipo==='Envío a Servicio Técnico') hechos.push({et:'Envío a ST', sub:a.empresa||'', fecha:a.fecha||'', done:true});
     else if(a.tipo==='Visita / Ejecución realizada') hechos.push({et:'Ejecución', sub:'Visita', fecha:a.fecha||'', done:true});
   });
   const hayInf = !!(ot.informeTecnicoFecha||ot.informeTecnicoNum);
@@ -1876,6 +1884,7 @@ function nodosExpediente(exp){
   /* criticidad y días de detención según la racha VIGENTE de estado del equipo */
   const estados=[{f:ot.fechaDocumento||'', est:estadoCorrectivoDe(ot.estadoEquipo)},
     ...(ot.avances||[]).filter(a=>a.estadoEquipoVisita).map(a=>({f:a.fecha||'', est:a.estadoEquipoVisita})),
+    ...(ot.avances||[]).filter(a=>a.tipo==='Envío a Servicio Técnico').map(a=>({f:a.fecha||'', est:'Servicio Técnico'})),
     ...(cerrado&&ot.estadoEquipoCierre?[{f:ot.fechaCierre||'', est:ot.estadoEquipoCierre}]:[])
   ].sort((a,b)=>a.f.localeCompare(b.f));
   let iniDet='';
@@ -1887,8 +1896,8 @@ function nodosExpediente(exp){
        : (ot.fechaDocumento ? diasEntre(ot.fechaDocumento, hoyISO()) : 0));
   return {ot, folio:exp.folio, nodos:n, cerrado, critico, dias, iniDet};
 }
-const ETAPAS_RANGO={'Cotización solicitada':1,'Cotización recibida':2,'Informe técnico':3,'OC emitida':4,'OC enviada':5,'Ejecución':6,'Envío a ST':6};
-const ETAPAS_TXT={1:'Cotización solicitada · esperando respuesta',2:'Cotización recibida · por elaborar informe',3:'Informe emitido · por emitir OC',4:'OC emitida · por enviar al proveedor',5:'OC enviada · esperando al proveedor',6:'Ejecutada · por cerrar'};
+const ETAPAS_RANGO={'Cotización solicitada':1,'Cotización recibida':2,'Informe técnico':3,'OC emitida':4,'OC enviada':5,'Envío a ST':6,'Ejecución':7};
+const ETAPAS_TXT={1:'Cotización solicitada · esperando respuesta',2:'Cotización recibida · por elaborar informe',3:'Informe emitido · por emitir OC',4:'OC emitida · por enviar al proveedor',5:'OC enviada · esperando al proveedor',6:'En servicio técnico externo · esperando retorno',7:'Ejecutada · por cerrar'};
 function etapaActualDe(x){
   /* la etapa corresponde al ÚLTIMO hito registrado (por fecha; el rango canónico desempata) */
   if(x.cerrado) return 'Cerrada';
@@ -1909,6 +1918,7 @@ function siguientePasoDe(x){
     'Informe emitido · por emitir OC':'OC emitida',
     'OC emitida · por enviar al proveedor':'OC enviada a proveedor',
     'OC enviada · esperando al proveedor':'Visita / Ejecución realizada',
+    'En servicio técnico externo · esperando retorno':'Visita / Ejecución realizada',
     'Ejecutada · por cerrar':'Cierre del expediente'
   };
   return sig[etapaActualDe(x)]||'Cotización solicitada';
@@ -1938,7 +1948,8 @@ function estadoActualEquipo(key){
     ...state.manuales.filter(m=>m.equipoKey===key && m.estadoEquipo).map(m=>({f:m.fecha||'', est:m.estadoEquipo})),
     ...state.correctivos.filter(c=>c.equipoKey===key && c.estadoEquipo).map(c=>({f:c.fechaDocumento||'', est:estadoCorrectivoDe(c.estadoEquipo)})),
     ...state.correctivos.filter(c=>c.equipoKey===key && c.fechaCierre && c.estadoEquipoCierre).map(c=>({f:c.fechaCierre, est:c.estadoEquipoCierre})),
-    ...state.correctivos.filter(c=>c.equipoKey===key).flatMap(c=>(c.avances||[]).filter(a=>a.estadoEquipoVisita).map(a=>({f:a.fecha||'', est:a.estadoEquipoVisita})))
+    ...state.correctivos.filter(c=>c.equipoKey===key).flatMap(c=>(c.avances||[]).filter(a=>a.estadoEquipoVisita).map(a=>({f:a.fecha||'', est:a.estadoEquipoVisita}))),
+    ...state.correctivos.filter(c=>c.equipoKey===key).flatMap(c=>(c.avances||[]).filter(a=>a.tipo==='Envío a Servicio Técnico').map(a=>({f:a.fecha||'', est:'Servicio Técnico'})))
   ].sort((a,b)=>b.f.localeCompare(a.f));
   return cand.length?cand[0].est:null;
 }
@@ -2026,7 +2037,7 @@ function renderExpedientesHTML(otsEq){
     });
     const avs=(x.ot.avances||[]).slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
     const bitacora = avs.length ? `<div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">${avs.map(a=>{
-      const extra=[a.informeNum?'Informe N° '+a.informeNum:'', a.ocNum?'OC '+a.ocNum:'', a.estadoEquipoVisita?'Equipo '+a.estadoEquipoVisita+' tras la visita':'', a.estadoEquipoCierre?'Equipo '+a.estadoEquipoCierre+' al cierre':''].filter(Boolean).join(' · ');
+      const extra=[a.informeNum?'Informe N° '+a.informeNum:'', a.ocNum?'OC '+a.ocNum:'', a.numeroEnvio?'Envío N° '+a.numeroEnvio+(a.empresa?' a '+a.empresa:''):'', a.estadoEquipoVisita?'Equipo '+a.estadoEquipoVisita+' tras la visita':'', a.estadoEquipoCierre?'Equipo '+a.estadoEquipoCierre+' al cierre':''].filter(Boolean).join(' · ');
       return `<div class="log-item" style="display:flex;gap:8px;align-items:flex-start">
         <div style="flex:1"><time>${fmtFecha(a.fecha)} · ${esc(a.tipo)}${a.registrado?' · registrado el '+esc(new Date(a.registrado).toLocaleString('es-CL')):''}${a.corregido?' · <span style="color:var(--ambar)">corregido el '+esc(new Date(a.corregido).toLocaleString('es-CL'))+'</span>':''}</time>${esc([a.detalle,extra].filter(Boolean).join(' — '))||'&nbsp;'}</div>
         <button class="btn mini" data-editar-av="${esc(x.ot.id)}" data-av="${esc(a.id||'')}" title="Corregir este avance">✎</button>
@@ -2087,6 +2098,9 @@ function abrirEdicionAvance(otId, avId){
     $('#av-oc-num').value=av.ocNum||'';
     $('#av-oc-desc').value=av.ocDesc||'';
     const tc=$('#av-oc-tc'); if(tc&&av.tipoCompra) tc.value=av.tipoCompra;
+  } else if(av.tipo==='Envío a Servicio Técnico'){
+    if(av.empresa) $('#av-env-empresa').innerHTML=opcionesEmpresas(av.empresa);
+    $('#av-env-numero').value=av.numeroEnvio||'';
   } else if(av.tipo==='Visita / Ejecución realizada'){
     $('#av-visita-estado').value=av.estadoEquipoVisita||'Operativo';
   } else if(av.tipo==='Cierre del expediente'){
@@ -2136,6 +2150,14 @@ function renderAvExtra(){
       </div>
       <div class="f-grupo"><label class="et">Descripción de la OC ${op}</label><textarea id="av-oc-desc">${esc(ot&&ot.ordenCompraDesc||'')}</textarea></div>
     </div>`;
+  } else if(t==='Envío a Servicio Técnico'){
+    x.innerHTML=`<div class="sub-form">
+      <div class="f-2col">
+        <div class="f-grupo"><label class="et">Empresa de destino <span class="req">*</span></label><select id="av-env-empresa">${opcionesEmpresas('')}</select></div>
+        <div class="f-grupo"><label class="et">N° de envío <span class="req">*</span></label><input type="text" id="av-env-numero" placeholder="N° del documento de envío"></div>
+      </div>
+      <small style="color:var(--gris-4)">El equipo quedará en estado <strong>Servicio Técnico</strong> desde la fecha del envío, hasta su retorno (Visita / Ejecución) o cierre.</small>
+    </div>`;
   } else if(t==='Visita / Ejecución realizada'){
     x.innerHTML=`<div class="sub-form"><div class="f-grupo"><label class="et">¿Cómo quedó el equipo tras la visita?</label><select id="av-visita-estado"><option>Operativo</option><option>No Operativo</option><option>Servicio Técnico</option></select></div></div>`;
   } else if(t==='Cierre del expediente'){
@@ -2152,6 +2174,9 @@ function capturarExtrasAvance(av, tipo){
     av.ocNum=$('#av-oc-num').value.trim();
     av.ocDesc=$('#av-oc-desc').value.trim();
     const tc=$('#av-oc-tc'); if(tc && tc.value) av.tipoCompra=tc.value;
+  } else if(tipo==='Envío a Servicio Técnico'){
+    const emp=$('#av-env-empresa').value; av.empresa = emp==='__nueva__'?'':emp;
+    av.numeroEnvio=$('#av-env-numero').value.trim();
   } else if(tipo==='Visita / Ejecución realizada'){
     av.estadoEquipoVisita=$('#av-visita-estado').value;
   } else if(tipo==='Cierre del expediente'){
@@ -2170,6 +2195,7 @@ function guardarAvance(){
     ['informeNum','responsable','empresa','ocNum','ocDesc','tipoCompra','estadoEquipoVisita','estadoEquipoCierre'].forEach(k=>delete av[k]);
     av.tipo=tipo; av.fecha=fecha; av.detalle=$('#av-detalle').value.trim();
     capturarExtrasAvance(av, tipo);
+    if(tipo==='Envío a Servicio Técnico' && (!av.empresa||!av.numeroEnvio)){ toast('⚠️ Indica la empresa de destino y el N° de envío.'); return; }
     av.corregido=new Date().toISOString();
     limpiarTrasCambio(ot, tipoOriginal, fechaOriginal);
     reaplicarAvances(ot);
@@ -2178,6 +2204,7 @@ function guardarAvance(){
   } else {
     const av={id:uid(), tipo, fecha, detalle:$('#av-detalle').value.trim(), registrado:new Date().toISOString()};
     capturarExtrasAvance(av, tipo);
+    if(tipo==='Envío a Servicio Técnico' && (!av.empresa||!av.numeroEnvio)){ toast('⚠️ Indica la empresa de destino y el N° de envío.'); return; }
     aplicarAvance(ot, av);
     txtOk='✅ Avance registrado: '+tipo+'.';
   }
@@ -2348,6 +2375,7 @@ function renderPendientes(){
    (nada sale del computador; se exporta manualmente al detener)
    ===================================================================== */
 let grab=null;
+const GRAB_MODALES={abrirModalMP:'modal-mp', abrirModalPendiente:'modal-pend', abrirModalOT:'modal-ot', abrirModalAvance:'modal-avance', abrirEdicionAvance:'modal-avance'};
 function selectorDe(el){
   if(!(el instanceof Element)) return '';
   const parts=[];
@@ -2382,14 +2410,20 @@ const grabHandlers={
   keydown(e){ if(e.key==='Enter'||e.key==='Escape') grabEvento({e:'tecla', k:e.key, sel:selectorDe(e.target)}); }
 };
 function grabError(e){ grabEvento({e:'error', msg:String(e.message||e).slice(0,200), linea:(e.lineno||'')+''}); }
+function grabFoco(){ grabEvento({e:'foco', estado:'vuelve'}); }
+function grabBlur(){ grabEvento({e:'foco', estado:'fuera'}); }
 function iniciarGrabacion(){
   grab={inicio:Date.now(), inicioISO:new Date().toISOString(), eventos:[], origs:{}, timer:null};
-  grabEvento({e:'contexto', vista:vistaActiva(),
+  grabEvento({e:'contexto', build:APP_BUILD, vista:vistaActiva(),
     equipos:state.equipos.length, correctivos:state.correctivos.length,
     pendientes:state.pendientes.length, manuales:state.manuales.length, empresas:state.empresas.length,
+    expedientesAbiertos:expedientesDe(state.correctivos).map(nodosExpediente).filter(x=>!x.cerrado).length,
+    enOperatividad:tableroOperatividad().length,
     viewport:innerWidth+'x'+innerHeight, agente:navigator.userAgent.slice(0,120)});
   ['click','input','change','keydown'].forEach(t=>document.addEventListener(t, grabHandlers[t], true));
   window.addEventListener('error', grabError);
+  window.addEventListener('focus', grabFoco);
+  window.addEventListener('blur', grabBlur);
   /* envolver funciones clave para registrar navegación y retroalimentación con precisión */
   grab.origs.mostrarVista=mostrarVista;
   mostrarVista=function(id){ grabEvento({e:'vista', id}); return grab.origs.mostrarVista(id); };
@@ -2397,6 +2431,16 @@ function iniciarGrabacion(){
   abrirDetalle=function(k){ grabEvento({e:'detalle', equipo:String(k).slice(0,60)}); return grab.origs.abrirDetalle(k); };
   grab.origs.toast=toast;
   toast=function(m){ grabEvento({e:'toast', msg:String(m).slice(0,160)}); return grab.origs.toast(m); };
+  grab.origs.cerrarModal=cerrarModal;
+  cerrarModal=function(id){
+    if($('#'+id).classList.contains('abierto')) grabEvento({e:'modal', id, accion:'cierra'});
+    return grab.origs.cerrarModal(id);
+  };
+  /* apertura de modales: envolver las funciones que los abren */
+  Object.entries(GRAB_MODALES).forEach(([fn,id])=>{
+    grab.origs[fn]=window[fn];
+    window[fn]=function(){ grabEvento({e:'modal', id, accion:'abre'}); return grab.origs[fn].apply(null, arguments); };
+  });
   grab.timer=setInterval(()=>{
     const s=Math.floor((Date.now()-grab.inicio)/1000);
     $('#btn-grabar').textContent='⏹ Detener · '+String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
@@ -2409,12 +2453,16 @@ function detenerGrabacion(){
   if(!grab) return;
   ['click','input','change','keydown'].forEach(t=>document.removeEventListener(t, grabHandlers[t], true));
   window.removeEventListener('error', grabError);
+  window.removeEventListener('focus', grabFoco);
+  window.removeEventListener('blur', grabBlur);
   clearInterval(grab.timer);
   mostrarVista=grab.origs.mostrarVista;
   abrirDetalle=grab.origs.abrirDetalle;
   toast=grab.origs.toast;
+  cerrarModal=grab.origs.cerrarModal;
+  Object.keys(GRAB_MODALES).forEach(fn=>{ if(grab.origs[fn]) window[fn]=grab.origs[fn]; });
   const datos={
-    tipo:'grabacion-gmp2026', version:1,
+    tipo:'grabacion-gmp2026', version:2, build:APP_BUILD,
     inicio:grab.inicioISO, fin:new Date().toISOString(),
     duracionSeg:Math.round((Date.now()-grab.inicio)/1000),
     resumen:{
@@ -2423,6 +2471,8 @@ function detenerGrabacion(){
       escritura:grab.eventos.filter(x=>x.e==='escribe').length,
       cambios:grab.eventos.filter(x=>x.e==='cambia').length,
       vistas:grab.eventos.filter(x=>x.e==='vista').length,
+      modales:grab.eventos.filter(x=>x.e==='modal'&&x.accion==='abre').length,
+      salidasDeFoco:grab.eventos.filter(x=>x.e==='foco'&&x.estado==='fuera').length,
       errores:grab.eventos.filter(x=>x.e==='error').length
     },
     eventos:grab.eventos
@@ -2605,7 +2655,7 @@ function conectarEventos(){
   $('#av-tipo').addEventListener('change',renderAvExtra);
   $('#av-guardar').addEventListener('click',guardarAvance);
   $('#av-extra').addEventListener('change',ev=>{
-    if(ev.target.id==='av-inf-empresa' && ev.target.value==='__nueva__'){
+    if((ev.target.id==='av-inf-empresa'||ev.target.id==='av-env-empresa') && ev.target.value==='__nueva__'){
       const nombre=(prompt('Nombre de la nueva empresa:')||'').trim();
       if(nombre){
         if(!state.empresas.some(x=>x.toLowerCase()===nombre.toLowerCase())){ state.empresas.push(nombre); guardar(); }
