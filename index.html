@@ -170,6 +170,10 @@ table.lista tr.click:hover td{background:var(--azul-claro)}
 .sub-form{border:1px dashed var(--gris-3);border-left:4px solid var(--azul);background:var(--gris-1);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:12px}
 
 /* ---------- Bandeja de pendientes ---------- */
+#tbody-pend tr.vencido td{background:#fff5f5}
+#tbody-pend tr.espera td{background:#fdf8ec}
+#tbody-pend tr.completado td{background:#f3faf4;color:var(--gris-4)}
+#tbody-pend td{white-space:normal}
 .pend-grupo{margin:18px 0 8px;font-size:.82rem;font-weight:700;color:var(--gris-4);text-transform:uppercase;letter-spacing:.5px;display:flex;gap:8px;align-items:center}
 .pend-card{border:1px solid var(--gris-2);border-left:4px solid var(--azul);border-radius:8px;padding:10px 14px;margin-bottom:10px;background:#fff;display:flex;flex-direction:column;gap:7px}
 .pend-card.vencido{border-left-color:var(--rojo);background:#fffbfb}
@@ -417,16 +421,20 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
   <div class="card">
     <h2>Pendientes</h2>
     <p class="sub">Gestiones pendientes asociadas a los equipos. Presiona un pendiente para ver o actualizar su gestión.</p>
-    <div class="fila-flex" style="margin-bottom:8px" id="pend-metricas"></div>
-    <div class="fila-flex" style="margin-bottom:14px">
-      <label style="font-size:.85rem;color:var(--gris-4)">Responsable ejecutivo
-        <select id="pend-f-resp" style="margin-left:6px;padding:5px 8px;border:1px solid var(--gris-3);border-radius:7px"><option value="">Todos</option></select>
-      </label>
-      <label style="font-size:.85rem;color:var(--gris-4)">Tipo
-        <select id="pend-f-tipo" style="margin-left:6px;padding:5px 8px;border:1px solid var(--gris-3);border-radius:7px"><option value="">Todos</option></select>
-      </label>
+    <div class="fila-flex" style="margin-bottom:10px" id="pend-metricas"></div>
+    <div class="barra-tabla">
+      <div class="buscador"><input type="text" id="busqueda-pend" placeholder="Buscar en pendientes…"></div>
+      <button class="btn mini" id="btn-limpiar-pend" style="display:none">✕ Limpiar filtros</button>
+      <span class="contador" id="contador-pend"></span>
+      <span style="flex:1"></span>
+      <button class="btn" id="btn-exportar-pend" title="Exporta las filas visibles según los filtros aplicados">⬇ Exportar vista</button>
     </div>
-    <div id="lista-pendientes"></div>
+    <div class="envoltura-tabla" id="lista-pendientes" style="max-height:calc(100vh - 320px)">
+      <table class="equipos">
+        <thead><tr id="thead-pend"></tr></thead>
+        <tbody id="tbody-pend"></tbody>
+      </table>
+    </div>
   </div>
 </section>
 
@@ -816,7 +824,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-12.17';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-12.18';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -1414,7 +1422,7 @@ function renderPlan(){
 }
 function abrirPopoverPlan(colKey, ancla){
   const pop=$('#filtro-pop');
-  popColPlan=colKey; popCol=null;
+  popColPlan=colKey; popCol=null; popColPend=null;
   const campo=PLAN_COLS.find(c=>c.k===colKey);
   const baseF=filasPlanFiltradas(colKey);
   const conteo=new Map();
@@ -1518,7 +1526,7 @@ function renderTabla(){
 let popCol=null;
 function abrirPopover(colKey, ancla){
   const pop=$('#filtro-pop');
-  popCol=colKey; popColPlan=null;
+  popCol=colKey; popColPlan=null; popColPend=null;
   const campo=CAMPOS_TABLA.find(c=>c.k===colKey);
   /* Valores disponibles considerando los filtros de las demás columnas (comportamiento Excel) */
   const base = filasFiltradas(colKey);
@@ -1579,7 +1587,7 @@ function abrirPopover(colKey, ancla){
     pagina=0; invalidar(); renderTabla(); cerrarPopover();
   });
 }
-function cerrarPopover(){ $('#filtro-pop').style.display='none'; popCol=null; popColPlan=null; }
+function cerrarPopover(){ $('#filtro-pop').style.display='none'; popCol=null; popColPlan=null; popColPend=null; }
 function abrirSelectorColumnas(ancla){
   const pop=$('#filtro-pop'); popCol=null; popColPlan=null;
   const visibles=new Set(colsEquiposVisibles().map(c=>c.k));
@@ -2729,51 +2737,63 @@ function tablaPendientes(lista){
     <tr><th>Equipo</th><th>Tipo de pendiente</th><th>F. compromiso</th><th>Tareas</th><th>Resp. Administrativo</th><th>Resp. Ejecutivo</th><th>Última gestión</th><th>Estado</th></tr>
     ${filas}</table></div>`;
 }
-let pendFResp='', pendFTipo='';
-function tarjetaPendiente(p){
+const PEND_COLS=[
+  {k:'equipo',l:'Equipo'},{k:'serie',l:'Serie'},{k:'tipo',l:'Tipo'},
+  {k:'urgencia',l:'Urgencia'},{k:'estadoG',l:'Estado'},
+  {k:'compromiso',l:'Compromiso'},{k:'atraso',l:'Días atraso'},{k:'tareas',l:'Tareas'},
+  {k:'respAdmin',l:'Resp. Adm'},{k:'respEjec',l:'Resp. Eje'},
+  {k:'esperaDe',l:'En espera de'},{k:'ultGestion',l:'Última gestión'},{k:'completado',l:'Completado'}
+];
+const URG_TXT={atrasados:'Atrasado', hoy:'Hoy', semana:'Esta semana', proximos:'Próximo', espera:'En espera', completados:'Completado'};
+const URG_RANGO={'Atrasado':0,'Hoy':1,'Esta semana':2,'Próximo':3,'En espera':4,'Completado':5};
+let filtrosPend={}, ordenPend={k:null,dir:1}, busquedaPend='', popColPend=null;
+function filasPendBase(){
   const hoy=hoyISO();
-  const e=equipoPorKey(p.equipoKey);
-  const est=estadoGestionPendiente(p);
-  const vencido = p.estado!=='Completado' && !p.esperaDe && p.fechaCompromiso && p.fechaCompromiso<hoy;
-  const atraso = vencido?diasEntre(p.fechaCompromiso,hoy):0;
-  const tareas=p.tareas||[];
-  const ult=(p.gestiones&&p.gestiones.length)?p.gestiones[p.gestiones.length-1]:null;
-  const chipEst = est==='Completado' ? '<span class="chip verde">Completado</span>'
-    : est==='En espera' ? `<span class="chip ambar">✋ En espera: ${esc(p.esperaDe)}</span>`
-    : est==='En gestión' ? '<span class="chip azul">En gestión</span>' : '<span class="chip gris">Nuevo</span>';
-  const compromiso = p.fechaCompromiso ? (vencido?`<span class="chip rojo">⚠ ${atraso} día${atraso!==1?'s':''} de atraso</span>`:`<span class="chip gris">compromiso ${fmtFecha(p.fechaCompromiso)}</span>`) : '<span class="chip gris">sin fecha</span>';
-  const acciones = p.estado==='Completado'
-    ? `<button class="btn mini" data-pc-editar="${p.id}" title="Abrir el detalle">✎</button>`
-    : `<button class="btn mini primario" data-pc-completar="${p.id}" title="Completar ahora">✔</button>
-       <button class="btn mini" data-pc-pos="${p.id}|1" title="Posponer 1 día">+1d</button>
-       <button class="btn mini" data-pc-pos="${p.id}|3" title="Posponer 3 días">+3d</button>
-       <button class="btn mini" data-pc-pos="${p.id}|7" title="Posponer 1 semana">+7d</button>
-       ${p.esperaDe?`<button class="btn mini" data-pc-reanudar="${p.id}" title="Quitar la espera">▶</button>`:`<button class="btn mini" data-pc-espera="${p.id}" title="Marcar en espera de un tercero">✋</button>`}
-       <button class="btn mini" data-pc-editar="${p.id}" title="Abrir el detalle">✎</button>`;
-  const tareasHtml = tareas.length?`<div class="pc-tareas">${tareas.map((t,i)=>`<label class="${t.hecha?'hecha':''}"><input type="checkbox" data-pc-tarea="${p.id}|${i}" ${t.hecha?'checked':''} ${p.estado==='Completado'?'disabled':''}> <span>${esc(t.texto)}</span></label>`).join('')}</div>`:'';
-  const gestionIn = p.estado==='Completado' ? '' : `<div class="pc-gestion-in"><input type="text" data-pc-gestion="${p.id}" placeholder="➕ Registrar gestión… (Enter)"></div>`;
-  return `<div class="pend-card ${vencido?'vencido':''} ${p.esperaDe&&p.estado!=='Completado'?'espera':''} ${p.estado==='Completado'?'completado':''}">
-    <div class="pc-cab">
-      <a href="#" data-pc-eq="${esc(p.equipoKey)}">${esc(e?e.equipo:p.equipoKey)}${e&&e.serie?' ('+esc(e.serie)+')':''}</a>
-      <span class="chip morado">${esc(p.tipo||'—')}</span>
-      ${chipEst} ${compromiso}
-      ${tareas.length?`<span class="chip gris">tareas ${tareas.filter(t=>t.hecha).length}/${tareas.length}</span>`:''}
-      <span class="pc-acciones">${acciones}</span>
-    </div>
-    ${p.descripcion?`<div class="pc-desc">${esc(p.descripcion)}</div>`:''}
-    ${tareasHtml}
-    ${ult?`<div style="font-size:.8rem;color:var(--gris-4)">Última gestión: <time>${esc(ult.fecha)}</time> — ${esc(ult.texto)}</div>`:''}
-    ${gestionIn}
-    <div class="pc-pie">
-      <span>Resp. adm: ${esc(p.respAdmin||'—')}</span><span>Resp. eje: ${esc(p.respEjec||'—')}</span>
-      <span>Creado: ${fmtFecha(p.creado)}</span>
-      ${p.fechaCompletado?`<span>Completado: ${fmtFecha(p.fechaCompletado)}</span>`:''}
-    </div>
-  </div>`;
+  return state.pendientes.map(p=>{
+    const e=equipoPorKey(p.equipoKey);
+    const urg=URG_TXT[grupoPendiente(p,hoy)];
+    const venc = p.estado!=='Completado' && !p.esperaDe && p.fechaCompromiso && p.fechaCompromiso<hoy;
+    const ult=(p.gestiones&&p.gestiones.length)?p.gestiones[p.gestiones.length-1]:null;
+    return { id:p.id, key:p.equipoKey, p,
+      equipo:e?e.equipo:p.equipoKey, serie:e?e.serie:'', tipo:p.tipo||'',
+      urgencia:urg, estadoG:estadoGestionPendiente(p),
+      compromiso:p.fechaCompromiso||'', atraso:venc?String(diasEntre(p.fechaCompromiso,hoy)):'',
+      tareas:(p.tareas&&p.tareas.length)?(p.tareas.filter(t=>t.hecha).length+'/'+p.tareas.length):'',
+      respAdmin:p.respAdmin||'', respEjec:p.respEjec||'',
+      esperaDe:p.esperaDe||'', ultGestion:ult?(ult.fecha+' — '+ult.texto):'',
+      completado:p.fechaCompletado||'' };
+  });
+}
+function pasaBusquedaPend(f){
+  if(!busquedaPend) return true;
+  const b=sinAcentos(busquedaPend).toLowerCase();
+  return PEND_COLS.some(c=>sinAcentos(f[c.k]||'').toLowerCase().includes(b));
+}
+function filasPendFiltradas(excluir){
+  return filasPendBase().filter(f=>
+    pasaBusquedaPend(f) &&
+    PEND_COLS.every(c=>c.k===excluir || !filtrosPend[c.k] || filtrosPend[c.k].has(f[c.k]||''))
+  );
+}
+function filasPendVisibles(){
+  let filas=filasPendFiltradas(null);
+  const k=ordenPend.k, dir=ordenPend.dir;
+  filas.sort((a,b)=>{
+    if(k){
+      if(k==='atraso') return dir*((+a.atraso||0)-(+b.atraso||0));
+      if(k==='urgencia') return dir*((URG_RANGO[a.urgencia]||9)-(URG_RANGO[b.urgencia]||9));
+      const va=a[k]||'', vb=b[k]||'';
+      if(va===''&&vb!=='') return 1;
+      if(vb===''&&va!=='') return -1;
+      return dir*String(va).localeCompare(String(vb),'es',{numeric:true,sensitivity:'base'});
+    }
+    return (URG_RANGO[a.urgencia]-URG_RANGO[b.urgencia]) || (a.compromiso||'9999').localeCompare(b.compromiso||'9999');
+  });
+  return filas;
 }
 function renderPendientes(){
-  const cont=$('#lista-pendientes');
-  if(!cont) return;
+  const thead=$('#thead-pend');
+  if(!thead) return;
   const m=metricasPendientes();
   $('#pend-metricas').innerHTML = `
     <span class="chip azul">${m.abiertos} abierto${m.abiertos!==1?'s':''}</span>
@@ -2781,27 +2801,106 @@ function renderPendientes(){
     ${m.espera?`<span class="chip ambar">✋ ${m.espera} en espera</span>`:''}
     <span class="chip verde">✔ ${m.compSemana} completado${m.compSemana!==1?'s':''} esta semana</span>
     ${m.tMedio!==null?`<span class="chip gris">⏱ resolución media: ${m.tMedio} día${m.tMedio!==1?'s':''}</span>`:''}`;
-  let lista=state.pendientes.slice();
-  if(pendFResp) lista=lista.filter(p=>p.respEjec===pendFResp);
-  if(pendFTipo) lista=lista.filter(p=>p.tipo===pendFTipo);
-  if(!lista.length){
-    cont.innerHTML='<div class="vacio">No hay pendientes con estos filtros. Se crean desde la ficha de cada equipo (botón «📋 Pendientes») o automáticamente al registrar mantenciones con gestión pendiente.</div>';
-    renderBadges(); return;
+  thead.innerHTML = PEND_COLS.map(c=>{
+    const filtrado=!!filtrosPend[c.k];
+    const flecha=ordenPend.k===c.k?(ordenPend.dir===1?' ▲':' ▼'):'';
+    return `<th><div class="th-int"><span class="tit">${esc(c.l)}${flecha}</span>
+      <button class="btn-filtro ${filtrado?'activo':''}" data-pend-col="${c.k}" title="Filtrar / ordenar">${filtrado?'⏷✓':'⏷'}</button></div></th>`;
+  }).join('')+'<th><div class="th-int"><span class="tit">Acciones</span></div></th>';
+  const filas=filasPendVisibles();
+  const tbody=$('#tbody-pend');
+  if(!state.pendientes.length){
+    tbody.innerHTML=`<tr><td colspan="${PEND_COLS.length+1}"><div class="vacio">Sin pendientes. Se crean desde la ficha de cada equipo o automáticamente al registrar mantenciones con gestión pendiente.</div></td></tr>`;
+  } else if(!filas.length){
+    tbody.innerHTML=`<tr><td colspan="${PEND_COLS.length+1}"><div class="vacio">Ningún pendiente coincide con los filtros.</div></td></tr>`;
+  } else {
+    tbody.innerHTML = filas.map(f=>{
+      const cls = f.estadoG==='Completado'?'completado':(f.esperaDe?'espera':(f.atraso?'vencido':''));
+      const acc = f.estadoG==='Completado'
+        ? `<button class="btn mini" data-pc-editar="${f.id}" title="Abrir el detalle">✎</button>`
+        : `<button class="btn mini primario" data-pc-completar="${f.id}" title="Completar ahora">✔</button>
+           <button class="btn mini" data-pc-pos="${f.id}|1" title="Posponer 1 día">+1</button>
+           <button class="btn mini" data-pc-pos="${f.id}|3" title="Posponer 3 días">+3</button>
+           <button class="btn mini" data-pc-pos="${f.id}|7" title="Posponer 1 semana">+7</button>
+           ${f.esperaDe?`<button class="btn mini" data-pc-reanudar="${f.id}" title="Quitar la espera">▶</button>`:`<button class="btn mini" data-pc-espera="${f.id}" title="Marcar en espera de un tercero">✋</button>`}
+           <button class="btn mini" data-pc-gestionp="${f.id}" title="Registrar gestión">➕</button>
+           <button class="btn mini" data-pc-editar="${f.id}" title="Abrir el detalle">✎</button>`;
+      const celdas = PEND_COLS.map(c=>{
+        let v=f[c.k]||'';
+        if(c.k==='equipo') return `<td style="max-width:200px"><a href="#" data-pc-eq="${esc(f.key)}" style="color:var(--azul-osc);font-weight:600">${esc(v)}</a></td>`;
+        if(c.k==='urgencia') return `<td>${v==='Atrasado'?'<span class="chip rojo">Atrasado</span>':v==='Hoy'?'<span class="chip ambar">Hoy</span>':v==='En espera'?'<span class="chip ambar">✋ En espera</span>':v==='Completado'?'<span class="chip verde">Completado</span>':'<span class="chip gris">'+esc(v)+'</span>'}</td>`;
+        if(c.k==='estadoG') return `<td>${v==='Completado'?'<span class="chip verde">Completado</span>':v==='En espera'?'<span class="chip ambar">En espera</span>':v==='En gestión'?'<span class="chip azul">En gestión</span>':'<span class="chip gris">Nuevo</span>'}</td>`;
+        if(c.k==='compromiso'||c.k==='completado') v=v?fmtFecha(v):'';
+        if(c.k==='ultGestion') return `<td style="max-width:260px" title="${esc(v)}">${esc(v.length>80?v.slice(0,80)+'…':v)||'—'}</td>`;
+        return `<td title="${esc(v)}">${esc(v)||'—'}</td>`;
+      }).join('');
+      return `<tr class="${cls}">${celdas}<td style="white-space:nowrap">${acc}</td></tr>`;
+    }).join('');
   }
-  const hoy=hoyISO();
-  const grupos={atrasados:[], hoy:[], semana:[], proximos:[], espera:[], completados:[]};
-  lista.forEach(p=>grupos[grupoPendiente(p,hoy)].push(p));
-  Object.values(grupos).forEach(l=>l.sort((a,b)=>(a.fechaCompromiso||'9999').localeCompare(b.fechaCompromiso||'9999')));
-  grupos.completados.sort((a,b)=>(b.fechaCompletado||'').localeCompare(a.fechaCompletado||''));
-  const sec=(titulo, l, abierto)=>!l.length?'':`<div class="pend-grupo">${titulo} <span class="chip gris">${l.length}</span></div>${l.map(tarjetaPendiente).join('')}`;
-  cont.innerHTML =
-    sec('🔴 Atrasados', grupos.atrasados) +
-    sec('🟠 Hoy', grupos.hoy) +
-    sec('🔵 Esta semana', grupos.semana) +
-    sec('⚪ Próximos / sin fecha', grupos.proximos) +
-    sec('✋ En espera', grupos.espera) +
-    (grupos.completados.length?`<details style="margin-top:16px"><summary class="pend-grupo" style="cursor:pointer">✅ Completados <span class="chip gris">${grupos.completados.length}</span></summary>${grupos.completados.map(tarjetaPendiente).join('')}</details>`:'');
+  $('#contador-pend').textContent=`Mostrando ${filas.length} de ${state.pendientes.length} pendientes`;
+  $('#btn-limpiar-pend').style.display=(Object.keys(filtrosPend).length||busquedaPend||ordenPend.k)?'':'none';
   renderBadges();
+}
+function abrirPopoverPend(colKey, ancla){
+  const pop=$('#filtro-pop');
+  popColPend=colKey; popCol=null; popColPlan=null;
+  const campo=PEND_COLS.find(c=>c.k===colKey);
+  const baseF=filasPendFiltradas(colKey);
+  const conteo=new Map();
+  baseF.forEach(f=>{ const v=f[colKey]||''; conteo.set(v,(conteo.get(v)||0)+1); });
+  let valores=[...conteo.keys()];
+  if(colKey==='urgencia') valores.sort((a,b)=>(URG_RANGO[a]||9)-(URG_RANGO[b]||9));
+  else valores.sort((a,b)=>String(a).localeCompare(String(b),'es',{numeric:true,sensitivity:'base'}));
+  const sel=filtrosPend[colKey];
+  pop.innerHTML=`
+    <div class="fp-cab">Filtro: ${esc(campo.l)}</div>
+    <div class="fp-sec"><button data-orden="1">Ordenar A → Z</button><button data-orden="-1">Ordenar Z → A</button></div>
+    <input class="fp-buscar" type="text" placeholder="Buscar valores…">
+    <div class="fp-lista">
+      <label><input type="checkbox" class="fp-todos" ${!sel?'checked':''}> <strong>(Seleccionar todo)</strong></label>
+      ${valores.map(v=>`<label data-v="${esc(v)}"><input type="checkbox" class="fp-val" value="${esc(v)}" ${(!sel||sel.has(v))?'checked':''}> <span>${v===''?'<em>(Vacías)</em>':esc(v.length>40?v.slice(0,40)+'…':v)}</span><span class="cnt">${conteo.get(v)}</span></label>`).join('')}
+    </div>
+    <div class="fp-pie"><button class="limpiar">Limpiar filtro</button><button class="ok">Aplicar</button></div>`;
+  const rect=ancla.getBoundingClientRect();
+  pop.style.display='block';
+  let x=rect.left+window.scrollX;
+  if(x+270 > window.scrollX+document.documentElement.clientWidth-10) x=window.scrollX+document.documentElement.clientWidth-280;
+  pop.style.left=x+'px';
+  pop.style.top=(rect.bottom+window.scrollY+6)+'px';
+  pop.querySelector('.fp-buscar').addEventListener('input', ev=>{
+    const b=sinAcentos(ev.target.value).toLowerCase();
+    pop.querySelectorAll('.fp-lista label[data-v]').forEach(l=>{ l.style.display=sinAcentos(l.dataset.v).toLowerCase().includes(b)?'':'none'; });
+  });
+  pop.querySelector('.fp-todos').addEventListener('change', ev=>{
+    pop.querySelectorAll('.fp-val').forEach(ch=>{ if(ch.closest('label').style.display!=='none') ch.checked=ev.target.checked; });
+  });
+  pop.querySelectorAll('[data-orden]').forEach(b=>b.addEventListener('click',()=>{
+    ordenPend=(ordenPend.k===colKey&&ordenPend.dir===+b.dataset.orden)?{k:null,dir:1}:{k:colKey,dir:+b.dataset.orden};
+    renderPendientes(); cerrarPopover();
+  }));
+  pop.querySelector('.limpiar').addEventListener('click',()=>{ delete filtrosPend[colKey]; renderPendientes(); cerrarPopover(); });
+  pop.querySelector('.ok').addEventListener('click',()=>{
+    const marcados=[...pop.querySelectorAll('.fp-val')].filter(ch=>ch.checked).map(ch=>ch.value);
+    const todos=pop.querySelectorAll('.fp-val').length;
+    if(marcados.length===todos) delete filtrosPend[colKey];
+    else filtrosPend[colKey]=new Set(marcados);
+    grabEvento({e:'filtro', tabla:'pendientes', col:colKey, seleccionados:marcados.length});
+    renderPendientes(); cerrarPopover();
+  });
+}
+function exportarPendientesVista(){
+  if(typeof XLSX==='undefined'){ toast('Librería XLSX no disponible.'); return; }
+  const filas=filasPendVisibles();
+  if(!filas.length){ toast('No hay filas para exportar.'); return; }
+  const aoa=[PEND_COLS.map(c=>c.l), ...filas.map(f=>PEND_COLS.map(c=>{
+    let v=f[c.k]||'';
+    if(c.k==='compromiso'||c.k==='completado') v=v?fmtFecha(v):'';
+    return String(v);
+  }))];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, hojaTexto(aoa, PEND_COLS.map(c=>({wch:Math.max(c.l.length+2,12)}))), 'Pendientes');
+  XLSX.writeFile(wb, 'Pendientes_GMP2026_'+hoyISO()+'.xlsx');
+  toast('⬇ Exportados '+filas.length+' pendientes.');
 }
 function pendPorId(id){ return state.pendientes.find(p=>p.id===id); }
 function gestionAuto(p, texto){ (p.gestiones=p.gestiones||[]).push({fecha:new Date().toLocaleString('es-CL'), texto}); p.actualizado=hoyISO(); }
@@ -2972,8 +3071,7 @@ function poblarSelects(){
   $('#mp-resultado').innerHTML = '<option value="">— Seleccionar —</option>'+
     ORDEN_RESULTADOS.map(c=>`<option value="${c}">${c} — ${esc(RESULTADOS[c].length>60?RESULTADOS[c].slice(0,60)+'…':RESULTADOS[c])}</option>`).join('');
   $('#pe-tipo').innerHTML = TIPOS_PENDIENTE.map(t=>`<option>${esc(t)}</option>`).join('');
-  $('#pend-f-resp').innerHTML = '<option value="">Todos</option>'+opEj;
-  $('#pend-f-tipo').innerHTML = '<option value="">Todos</option>'+TIPOS_PENDIENTE.map(t=>`<option>${esc(t)}</option>`).join('');
+
   $('#tabla-causales').insertAdjacentHTML('beforeend',
     Object.entries(CAUSALES).map(([c,d])=>`<tr><td><span class="chip ambar">${c}</span></td><td>${esc(d)}</td></tr>`).join(''));
   $('#tabla-meses-cols').insertAdjacentHTML('beforeend',
@@ -3187,10 +3285,22 @@ function conectarEventos(){
     if(tr) abrirDetalle(tr.dataset.operEq);
   });
 
-  /* Bandeja de pendientes */
-  $('#pend-f-resp').addEventListener('change',ev=>{ pendFResp=ev.target.value; renderPendientes(); });
-  $('#pend-f-tipo').addEventListener('change',ev=>{ pendFTipo=ev.target.value; renderPendientes(); });
+  /* Bandeja de pendientes (tabla tipo Excel) */
+  $('#busqueda-pend').addEventListener('input', debounce(()=>{ busquedaPend=$('#busqueda-pend').value; renderPendientes(); },180));
+  $('#btn-limpiar-pend').addEventListener('click',()=>{ filtrosPend={}; ordenPend={k:null,dir:1}; busquedaPend=''; $('#busqueda-pend').value=''; renderPendientes(); });
+  $('#btn-exportar-pend').addEventListener('click',exportarPendientesVista);
+  $('#thead-pend').addEventListener('click',ev=>{
+    const b=ev.target.closest('.btn-filtro');
+    if(b){ ev.stopPropagation(); (popColPend===b.dataset.pendCol)?cerrarPopover():abrirPopoverPend(b.dataset.pendCol,b); }
+  });
   $('#lista-pendientes').addEventListener('click',ev=>{
+    const gp=ev.target.closest('[data-pc-gestionp]');
+    if(gp){
+      const p=pendPorId(gp.dataset.pcGestionp);
+      const t=(prompt('Registrar gestión del pendiente:')||'').trim();
+      if(p && t){ gestionAuto(p,t); guardar(); renderPendientes(); toast('➕ Gestión registrada.'); }
+      return;
+    }
     const eq=ev.target.closest('[data-pc-eq]');
     if(eq){ ev.preventDefault(); abrirDetalle(eq.dataset.pcEq); return; }
     const co=ev.target.closest('[data-pc-completar]');
@@ -3209,15 +3319,7 @@ function conectarEventos(){
       if(p && p.tareas && p.tareas[+i]){ p.tareas[+i].hecha=ev.target.checked; p.actualizado=hoyISO(); guardar(); renderPendientes(); }
     }
   });
-  $('#lista-pendientes').addEventListener('keydown',ev=>{
-    if(ev.key!=='Enter' || !ev.target.matches('[data-pc-gestion]')) return;
-    ev.preventDefault();
-    const p=pendPorId(ev.target.dataset.pcGestion);
-    const t=ev.target.value.trim();
-    if(!p||!t) return;
-    gestionAuto(p, t);
-    guardar(); renderPendientes(); toast('➕ Gestión registrada.');
-  });
+
 }
 
 /* ---------- Inicio ---------- */
