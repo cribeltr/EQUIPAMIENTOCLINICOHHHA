@@ -245,6 +245,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
   <nav id="nav-principal">
     <button data-vista="carga">📂 Carga de Datos</button>
     <button data-vista="equipos">🛠 Equipos <span class="nbadge" id="badge-equipos" style="display:none"></span></button>
+    <button data-vista="plan">📅 Plan de Mantenimiento</button>
     <button data-vista="pendientes">📋 Pendientes <span class="nbadge" id="badge-pend" style="display:none"></span></button>
     <button data-vista="operatividad">🩺 Operatividad <span class="nbadge" id="badge-oper" style="display:none"></span></button>
     <button data-vista="codigos">📖 Códigos y Reglas</button>
@@ -326,6 +327,35 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
       <button id="pag-prev">‹ Anterior</button>
       <span id="pag-info"></span>
       <button id="pag-next">Siguiente ›</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ VISTA: PLAN DE MANTENIMIENTO ============ -->
+<section class="vista" id="vista-plan">
+  <div class="card">
+    <h2>📅 Plan de Mantenimiento</h2>
+    <p class="sub">Una fila por evento de mantención (equipo y mes), uniendo la programación, la planilla y los registros de la app. Cada columna con filtros tipo Excel; presiona una fila para abrir la ficha del equipo.</p>
+    <div class="barra-tabla">
+      <div class="buscador"><input type="text" id="busqueda-plan" placeholder="Buscar en el plan…"></div>
+      <button class="btn mini" id="btn-limpiar-plan" style="display:none">✕ Limpiar filtros</button>
+      <span class="contador" id="contador-plan"></span>
+      <span style="flex:1"></span>
+      <button class="btn" id="btn-exportar-plan" title="Exporta las filas visibles según los filtros aplicados">⬇ Exportar vista</button>
+    </div>
+    <div class="envoltura-tabla">
+      <table class="equipos">
+        <thead><tr id="thead-plan"></tr></thead>
+        <tbody id="tbody-plan"></tbody>
+      </table>
+    </div>
+    <div class="paginacion">
+      <label>Filas por página
+        <select id="plan-sel-pagina"><option>50</option><option selected>100</option><option>250</option><option value="all">Todas</option></select>
+      </label>
+      <button id="plan-prev">‹ Anterior</button>
+      <span id="plan-info"></span>
+      <button id="plan-next">Siguiente ›</button>
     </div>
   </div>
 </section>
@@ -737,6 +767,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
             <option>OC emitida</option>
             <option>OC enviada a proveedor</option>
             <option>Envío a Servicio Técnico</option>
+            <option>Retorno de Servicio Técnico</option>
             <option>Visita / Ejecución realizada</option>
             <option>Cierre del expediente</option>
             <option>Otro avance</option>
@@ -772,7 +803,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-12.12';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-12.13';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -791,6 +822,19 @@ const CAMPOS = [
   {k:'vidaUtil',    l:'Vida Útil Residual',col:'N'},
   {k:'clasificacion',l:'Clasificación',    col:'O'},
   {k:'enu',         l:'ENU / Baja',        col:'P'}
+];
+/* Columnas calculadas de la vista de equipos (estado, última actualización, pendientes) */
+const CAMPOS_CALC = [
+  {k:'_estado',      l:'Estado equipo'},
+  {k:'_actualizado', l:'Última actualización'},
+  {k:'_pend',        l:'Pendientes'}
+];
+const CAMPOS_TABLA = CAMPOS.concat(CAMPOS_CALC);
+/* Columnas de la vista Plan de Mantenimiento (una fila por evento de mantención) */
+const PLAN_COLS = [
+  {k:'equipo',l:'Equipo'},{k:'serie',l:'Serie'},{k:'inventario',l:'N° Inventario'},{k:'servicio',l:'Servicio'},
+  {k:'mes',l:'Mes'},{k:'programa',l:'Programa'},{k:'resultado',l:'Resultado'},{k:'fechaApp',l:'Fecha ejecución (app)'},
+  {k:'registro',l:'Registro'},{k:'origen',l:'Origen'}
 ];
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const MESES_PMP_COLS = ['T','U','V','W','X','Y','Z','AA','AB','AC','AD','AE'];     // Paso 3
@@ -1114,12 +1158,14 @@ function mostrarVista(id){
   $$('#nav-principal button').forEach(b=>b.classList.toggle('activa', b.dataset.vista===id));
   cerrarPopover();
   if(id==='equipos') renderTabla();
+  if(id==='plan') renderPlan();
   if(id==='pendientes') renderPendientes();
   if(id==='operatividad') renderOperatividad();
   window.scrollTo({top:0});
 }
 function renderTodo(){
-  renderResumen(); renderTabla(); renderPendientes(); renderOperatividad(); renderBadges();
+  calcularDerivadosEquipos(); invalidar(); invalidarPlan();
+  renderResumen(); renderTabla(); renderPlan(); renderPendientes(); renderOperatividad(); renderBadges();
   if(detalleKey) renderDetalle(detalleKey);
 }
 function renderBadges(){
@@ -1254,12 +1300,12 @@ function renderResumen(){
 function pasaBusqueda(e){
   if(!busqueda) return true;
   const b = sinAcentos(busqueda).toLowerCase();
-  return CAMPOS.some(c => sinAcentos(e[c.k]||'').toLowerCase().includes(b));
+  return CAMPOS_TABLA.some(c => sinAcentos(e[c.k]||'').toLowerCase().includes(b));
 }
 function filasFiltradas(excluir){
   return state.equipos.filter(e =>
     pasaBusqueda(e) &&
-    CAMPOS.every(c => c.k===excluir || !filtros[c.k] || filtros[c.k].has(e[c.k]||''))
+    CAMPOS_TABLA.every(c => c.k===excluir || !filtros[c.k] || filtros[c.k].has(e[c.k]||''))
   );
 }
 function filasVisibles(){
@@ -1279,9 +1325,142 @@ function filasVisibles(){
 }
 function invalidar(){ cacheFiltradas=null; }
 
+/* =====================================================================
+   VISTA PLAN DE MANTENIMIENTO — una fila por evento, todo filtrable
+   ===================================================================== */
+let filtrosPlan={}, ordenPlan={k:null,dir:1}, busquedaPlan='', paginaPlan=0;
+let cachePlanBase=null, cachePlanFil=null, popColPlan=null;
+function invalidarPlan(){ cachePlanBase=null; cachePlanFil=null; }
+function basePlan(){ if(!cachePlanBase) cachePlanBase=filasPlanBase(); return cachePlanBase; }
+function pasaBusquedaPlan(f){
+  if(!busquedaPlan) return true;
+  const b=sinAcentos(busquedaPlan).toLowerCase();
+  return PLAN_COLS.some(c=>sinAcentos(f[c.k]||'').toLowerCase().includes(b));
+}
+function filasPlanFiltradas(excluir){
+  return basePlan().filter(f =>
+    pasaBusquedaPlan(f) &&
+    PLAN_COLS.every(c => c.k===excluir || !filtrosPlan[c.k] || filtrosPlan[c.k].has(f[c.k]||''))
+  );
+}
+function filasPlanVisibles(){
+  if(cachePlanFil) return cachePlanFil;
+  let filas=filasPlanFiltradas(null);
+  if(ordenPlan.k){
+    const k=ordenPlan.k, dir=ordenPlan.dir;
+    filas=filas.slice().sort((a,b)=>{
+      if(k==='mes') return dir*((a.mesIdx||0)-(b.mesIdx||0));
+      const va=a[k]||'', vb=b[k]||'';
+      if(va===''&&vb!=='') return 1;
+      if(vb===''&&va!=='') return -1;
+      return dir*String(va).localeCompare(String(vb),'es',{numeric:true,sensitivity:'base'});
+    });
+  }
+  cachePlanFil=filas;
+  return filas;
+}
+function renderPlan(){
+  const thead=$('#thead-plan');
+  if(!thead) return;
+  thead.innerHTML = PLAN_COLS.map(c=>{
+    const filtrado=!!filtrosPlan[c.k];
+    const flecha=ordenPlan.k===c.k?(ordenPlan.dir===1?' ▲':' ▼'):'';
+    return `<th><div class="th-int"><span class="tit">${esc(c.l)}${flecha}</span>
+      <button class="btn-filtro ${filtrado?'activo':''}" data-plan-col="${c.k}" title="Filtrar / ordenar">${filtrado?'⏷✓':'⏷'}</button></div></th>`;
+  }).join('');
+  const filas=filasPlanVisibles();
+  const selPag=$('#plan-sel-pagina').value;
+  const tam=selPag==='all'?filas.length||1:parseInt(selPag,10);
+  const totalPag=Math.max(1, Math.ceil(filas.length/tam));
+  if(paginaPlan>=totalPag) paginaPlan=totalPag-1;
+  const visibles=filas.slice(paginaPlan*tam, paginaPlan*tam+tam);
+  const tbody=$('#tbody-plan');
+  if(!basePlan().length){
+    tbody.innerHTML=`<tr><td colspan="${PLAN_COLS.length}"><div class="vacio">Sin eventos de mantención: carga la planilla en «Carga de Datos».</div></td></tr>`;
+  } else if(!filas.length){
+    tbody.innerHTML=`<tr><td colspan="${PLAN_COLS.length}"><div class="vacio">Ningún evento coincide con los filtros aplicados.</div></td></tr>`;
+  } else {
+    tbody.innerHTML=visibles.map(f=>`<tr data-key="${esc(f.key)}">`+PLAN_COLS.map(c=>{
+      let v=f[c.k]||'';
+      if(c.k==='programa') return `<td>${chipPrograma(v)||'—'}</td>`;
+      if(c.k==='resultado') return `<td>${chipResultado(v)||'—'}</td>`;
+      if(c.k==='registro') return `<td>${v==='Oficial'?'<span class="chip verde">Oficial</span>':'<span class="chip ambar">Borrador</span>'}</td>`;
+      if(c.k==='fechaApp') v=v?fmtFecha(v):'';
+      return `<td title="${esc(v)}">${esc(v)||'—'}</td>`;
+    }).join('')+'</tr>').join('');
+  }
+  $('#contador-plan').textContent=`Mostrando ${filas.length} de ${basePlan().length} eventos`;
+  $('#plan-info').textContent=`Página ${paginaPlan+1} de ${totalPag}`;
+  $('#plan-prev').disabled=paginaPlan<=0;
+  $('#plan-next').disabled=paginaPlan>=totalPag-1;
+  $('#btn-limpiar-plan').style.display=(Object.keys(filtrosPlan).length||busquedaPlan||ordenPlan.k)?'':'none';
+}
+function abrirPopoverPlan(colKey, ancla){
+  const pop=$('#filtro-pop');
+  popColPlan=colKey; popCol=null;
+  const campo=PLAN_COLS.find(c=>c.k===colKey);
+  const baseF=filasPlanFiltradas(colKey);
+  const conteo=new Map();
+  baseF.forEach(f=>{ const v=f[colKey]||''; conteo.set(v,(conteo.get(v)||0)+1); });
+  let valores=[...conteo.keys()];
+  if(colKey==='mes') valores.sort((a,b)=>MESES.indexOf(a)-MESES.indexOf(b));
+  else valores.sort((a,b)=>String(a).localeCompare(String(b),'es',{numeric:true,sensitivity:'base'}));
+  const LIM=600, recortado=valores.length>LIM;
+  if(recortado) valores=valores.slice(0,LIM);
+  const sel=filtrosPlan[colKey];
+  pop.innerHTML=`
+    <div class="fp-cab">Filtro: ${esc(campo.l)}</div>
+    <div class="fp-sec"><button data-orden="1">Ordenar A → Z</button><button data-orden="-1">Ordenar Z → A</button></div>
+    <input class="fp-buscar" type="text" placeholder="Buscar valores…">
+    <div class="fp-lista">
+      <label><input type="checkbox" class="fp-todos" ${!sel?'checked':''}> <strong>(Seleccionar todo)</strong></label>
+      ${valores.map(v=>`<label data-v="${esc(v)}"><input type="checkbox" class="fp-val" value="${esc(v)}" ${(!sel||sel.has(v))?'checked':''}> <span>${v===''?'<em>(Vacías)</em>':esc(v)}</span><span class="cnt">${conteo.get(v)}</span></label>`).join('')}
+      ${recortado?`<div class="vacio" style="padding:8px">Se muestran los primeros ${LIM} valores; usa la búsqueda para acotar.</div>`:''}
+    </div>
+    <div class="fp-pie"><button class="limpiar">Limpiar filtro</button><button class="ok">Aplicar</button></div>`;
+  const rect=ancla.getBoundingClientRect();
+  pop.style.display='block';
+  let x=rect.left+window.scrollX;
+  if(x+270 > window.scrollX+document.documentElement.clientWidth-10) x=window.scrollX+document.documentElement.clientWidth-280;
+  pop.style.left=x+'px';
+  pop.style.top=(rect.bottom+window.scrollY+6)+'px';
+  pop.querySelector('.fp-buscar').addEventListener('input', ev=>{
+    const b=sinAcentos(ev.target.value).toLowerCase();
+    pop.querySelectorAll('.fp-lista label[data-v]').forEach(l=>{ l.style.display=sinAcentos(l.dataset.v).toLowerCase().includes(b)?'':'none'; });
+  });
+  pop.querySelector('.fp-todos').addEventListener('change', ev=>{
+    pop.querySelectorAll('.fp-val').forEach(ch=>{ if(ch.closest('label').style.display!=='none') ch.checked=ev.target.checked; });
+  });
+  pop.querySelectorAll('[data-orden]').forEach(b=>b.addEventListener('click',()=>{
+    ordenPlan=(ordenPlan.k===colKey&&ordenPlan.dir===+b.dataset.orden)?{k:null,dir:1}:{k:colKey,dir:+b.dataset.orden};
+    cachePlanFil=null; renderPlan(); cerrarPopover();
+  }));
+  pop.querySelector('.limpiar').addEventListener('click',()=>{
+    delete filtrosPlan[colKey]; paginaPlan=0; cachePlanFil=null; renderPlan(); cerrarPopover();
+  });
+  pop.querySelector('.ok').addEventListener('click',()=>{
+    const marcados=[...pop.querySelectorAll('.fp-val')].filter(ch=>ch.checked).map(ch=>ch.value);
+    const todos=pop.querySelectorAll('.fp-val').length;
+    if(marcados.length===todos && !recortado) delete filtrosPlan[colKey];
+    else filtrosPlan[colKey]=new Set(marcados);
+    grabEvento({e:'filtro', tabla:'plan', col:colKey, seleccionados:marcados.length});
+    paginaPlan=0; cachePlanFil=null; renderPlan(); cerrarPopover();
+  });
+}
+function exportarPlan(){
+  if(typeof XLSX==='undefined'){ toast('Librería XLSX no disponible.'); return; }
+  const filas=filasPlanVisibles();
+  if(!filas.length){ toast('No hay filas para exportar.'); return; }
+  const aoa=[PLAN_COLS.map(c=>c.l), ...filas.map(f=>PLAN_COLS.map(c=>String(c.k==='fechaApp'&&f[c.k]?fmtFecha(f[c.k]):(f[c.k]||''))))];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, hojaTexto(aoa, PLAN_COLS.map(c=>({wch:Math.max(c.l.length+2,12)}))), 'Plan');
+  XLSX.writeFile(wb, 'Plan_GMP2026_'+hoyISO()+'.xlsx');
+  toast('⬇ Exportados '+filas.length+' eventos del plan.');
+}
+
 function renderTabla(){
   const thead=$('#thead-equipos');
-  thead.innerHTML = CAMPOS.map(c=>{
+  thead.innerHTML = CAMPOS_TABLA.map(c=>{
     const filtrado = !!filtros[c.k];
     const flecha = orden.k===c.k ? (orden.dir===1?' ▲':' ▼') : '';
     return `<th><div class="th-int"><span class="tit">${esc(c.l)}${flecha}</span>
@@ -1298,12 +1477,12 @@ function renderTabla(){
 
   const tbody=$('#tbody-equipos');
   if(!state.equipos.length){
-    tbody.innerHTML = `<tr><td colspan="${CAMPOS.length}"><div class="vacio">No hay equipos cargados. Ve a <a href="#" onclick="mostrarVista('carga');return false">Carga de Datos</a>.</div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${CAMPOS_TABLA.length}"><div class="vacio">No hay equipos cargados. Ve a <a href="#" onclick="mostrarVista('carga');return false">Carga de Datos</a>.</div></td></tr>`;
   } else if(!filas.length){
-    tbody.innerHTML = `<tr><td colspan="${CAMPOS.length}"><div class="vacio">Ningún equipo coincide con los filtros aplicados.</div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${CAMPOS_TABLA.length}"><div class="vacio">Ningún equipo coincide con los filtros aplicados.</div></td></tr>`;
   } else {
     tbody.innerHTML = visibles.map(e =>
-      `<tr data-key="${esc(e.key)}">` + CAMPOS.map(c=>`<td title="${esc(e[c.k])}">${esc(e[c.k])}</td>`).join('') + '</tr>'
+      `<tr data-key="${esc(e.key)}">` + CAMPOS_TABLA.map(c=>`<td title="${esc(e[c.k])}">${esc(e[c.k])}</td>`).join('') + '</tr>'
     ).join('');
   }
   $('#contador-filas').textContent = `Mostrando ${filas.length} de ${state.equipos.length} equipos`;
@@ -1317,8 +1496,8 @@ function renderTabla(){
 let popCol=null;
 function abrirPopover(colKey, ancla){
   const pop=$('#filtro-pop');
-  popCol=colKey;
-  const campo=CAMPOS.find(c=>c.k===colKey);
+  popCol=colKey; popColPlan=null;
+  const campo=CAMPOS_TABLA.find(c=>c.k===colKey);
   /* Valores disponibles considerando los filtros de las demás columnas (comportamiento Excel) */
   const base = filasFiltradas(colKey);
   const conteo=new Map();
@@ -1374,10 +1553,11 @@ function abrirPopover(colKey, ancla){
     const todos=pop.querySelectorAll('.fp-val').length;
     if(marcados.length===todos && !recortado) delete filtros[colKey];
     else filtros[colKey]=new Set(marcados);
+    grabEvento({e:'filtro', tabla:'equipos', col:colKey, seleccionados:marcados.length});
     pagina=0; invalidar(); renderTabla(); cerrarPopover();
   });
 }
-function cerrarPopover(){ $('#filtro-pop').style.display='none'; popCol=null; }
+function cerrarPopover(){ $('#filtro-pop').style.display='none'; popCol=null; popColPlan=null; }
 document.addEventListener('click', ev=>{
   const pop=$('#filtro-pop');
   if(pop.style.display==='block' && !pop.contains(ev.target) && !ev.target.closest('.btn-filtro')) cerrarPopover();
@@ -1396,9 +1576,9 @@ function exportarEquipos(){
   if(typeof XLSX==='undefined'){ toast('Librería XLSX no disponible.'); return; }
   const filas = filasVisibles();
   if(!filas.length){ toast('No hay filas para exportar.'); return; }
-  const aoa = [CAMPOS.map(c=>c.l), ...filas.map(e=>CAMPOS.map(c=>String(e[c.k]||'')))];
+  const aoa = [CAMPOS_TABLA.map(c=>c.l), ...filas.map(e=>CAMPOS_TABLA.map(c=>String(e[c.k]||'')))];
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, hojaTexto(aoa, CAMPOS.map(c=>({wch: Math.max(c.l.length+2, 12)}))), 'Equipos');
+  XLSX.utils.book_append_sheet(wb, hojaTexto(aoa, CAMPOS_TABLA.map(c=>({wch: Math.max(c.l.length+2, 12)}))), 'Equipos');
   XLSX.writeFile(wb, 'Equipos_GMP2026_'+hoyISO()+'.xlsx');
   toast('⬇ Exportados '+filas.length+' equipos.');
 }
@@ -1462,7 +1642,7 @@ function exportarTodo(){
       c.ordenCompraFecha?fmtFecha(c.ordenCompraFecha):'', c.ordenCompraDesc||'',
       estadoEventoDe(c), c.fechaCierre?fmtFecha(c.fechaCierre):'',
       (c.avances||[]).map(a=>{
-        const ex=[a.detalle||'', a.informeNum?'Informe N° '+a.informeNum:'', a.ocNum?'OC '+a.ocNum:'', a.numeroEnvio?'Envío N° '+a.numeroEnvio+(a.empresa?' a '+a.empresa:''):'', a.estadoEquipoVisita?'Equipo '+a.estadoEquipoVisita:'', a.estadoEquipoCierre?'Equipo '+a.estadoEquipoCierre+' al cierre':''].filter(Boolean).join(' · ');
+        const ex=[a.detalle||'', a.informeNum?'Informe N° '+a.informeNum:'', a.ocNum?'OC '+a.ocNum:'', a.numeroEnvio?'Envío N° '+a.numeroEnvio+(a.empresa?' a '+a.empresa:''):'', a.folioRetorno?'Retorno folio '+a.folioRetorno+(a.empresa?' de '+a.empresa:'')+(a.enviadoPor?' · enviado por '+a.enviadoPor:''):'', a.estadoEquipoRetorno?'Equipo '+a.estadoEquipoRetorno+' al retorno':'', a.estadoEquipoVisita?'Equipo '+a.estadoEquipoVisita:'', a.estadoEquipoCierre?'Equipo '+a.estadoEquipoCierre+' al cierre':''].filter(Boolean).join(' · ');
         return fmtFecha(a.fecha)+' — '+a.tipo+(ex?': '+ex:'');
       }).join('\n'),
       c.gestionPendiente?'Sí':'No', c.tipoRegistro||'Oficial', fmtFecha(c.creado)]);
@@ -1895,6 +2075,7 @@ function nodosExpediente(exp){
     else if(a.tipo==='Cotización recibida') hechos.push({et:'Cotización recibida', sub:'', fecha:a.fecha||'', done:true});
     else if(a.tipo==='OC enviada a proveedor') hechos.push({et:'OC enviada', sub:'', fecha:a.fecha||'', done:true});
     else if(a.tipo==='Envío a Servicio Técnico') hechos.push({et:'Envío a ST', sub:a.empresa||'', fecha:a.fecha||'', done:true});
+    else if(a.tipo==='Retorno de Servicio Técnico') hechos.push({et:'Retorno de ST', sub:[a.folioRetorno?('Folio '+a.folioRetorno):'', a.empresa||''].filter(Boolean).join(' · '), fecha:a.fecha||'', done:true});
     else if(a.tipo==='Visita / Ejecución realizada') hechos.push({et:'Ejecución', sub:'Visita', fecha:a.fecha||'', done:true});
   });
   const hayInf = !!(ot.informeTecnicoFecha||ot.informeTecnicoNum);
@@ -1919,6 +2100,7 @@ function nodosExpediente(exp){
   const estados=[{f:ot.fechaDocumento||'', est:estadoCorrectivoDe(ot.estadoEquipo)},
     ...(ot.avances||[]).filter(a=>a.estadoEquipoVisita).map(a=>({f:a.fecha||'', est:a.estadoEquipoVisita})),
     ...(ot.avances||[]).filter(a=>a.tipo==='Envío a Servicio Técnico').map(a=>({f:a.fecha||'', est:'Servicio Técnico'})),
+    ...(ot.avances||[]).filter(a=>a.tipo==='Retorno de Servicio Técnico' && a.estadoEquipoRetorno).map(a=>({f:a.fecha||'', est:a.estadoEquipoRetorno})),
     ...(cerrado&&ot.estadoEquipoCierre?[{f:ot.fechaCierre||'', est:ot.estadoEquipoCierre}]:[])
   ].sort((a,b)=>a.f.localeCompare(b.f));
   let iniDet='';
@@ -1930,15 +2112,21 @@ function nodosExpediente(exp){
        : (ot.fechaDocumento ? diasEntre(ot.fechaDocumento, hoyISO()) : 0));
   return {ot, folio:exp.folio, nodos:n, cerrado, critico, dias, iniDet};
 }
-const ETAPAS_RANGO={'Cotización solicitada':1,'Cotización recibida':2,'Informe técnico':3,'OC emitida':4,'OC enviada':5,'Envío a ST':6,'Ejecución':7};
+const ETAPAS_RANGO={'Cotización solicitada':1,'Cotización recibida':2,'Informe técnico':3,'OC emitida':4,'OC enviada':5,'Envío a ST':6,'Retorno de ST':7,'Ejecución':7};
 const ETAPAS_TXT={1:'Cotización solicitada · esperando respuesta',2:'Cotización recibida · por elaborar informe',3:'Informe emitido · por emitir OC',4:'OC emitida · por enviar al proveedor',5:'OC enviada · esperando al proveedor',6:'En servicio técnico externo · esperando retorno',7:'Ejecutada · por cerrar'};
 function etapaActualDe(x){
   /* la etapa corresponde al ÚLTIMO hito registrado (por fecha; el rango canónico desempata) */
   if(x.cerrado) return 'Cerrada';
-  const hitos=x.nodos.filter(n=>n.done && ETAPAS_RANGO[n.et]).map(n=>({f:n.fecha||'', r:ETAPAS_RANGO[n.et]}));
+  const hitos=x.nodos.filter(n=>n.done && ETAPAS_RANGO[n.et]).map(n=>({f:n.fecha||'', r:ETAPAS_RANGO[n.et], et:n.et}));
   if(!hitos.length) return 'En evaluación / cotización';
   hitos.sort((a,b)=>a.f.localeCompare(b.f)||a.r-b.r);
-  return ETAPAS_TXT[hitos[hitos.length-1].r];
+  const ult=hitos[hitos.length-1];
+  if(ult.et==='Retorno de ST'){
+    const rets=(x.ot.avances||[]).filter(a=>a.tipo==='Retorno de Servicio Técnico').sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+    const est=rets.length?(rets[rets.length-1].estadoEquipoRetorno||'Operativo'):'Operativo';
+    return est==='Operativo' ? 'Retornado · por cerrar' : 'Retornado sin reparar · evaluar';
+  }
+  return ETAPAS_TXT[ult.r];
 }
 function xDeOT(ot){
   const exp=expedientesDe(state.correctivos).find(e=>e.evs.includes(ot));
@@ -1952,10 +2140,69 @@ function siguientePasoDe(x){
     'Informe emitido · por emitir OC':'OC emitida',
     'OC emitida · por enviar al proveedor':'OC enviada a proveedor',
     'OC enviada · esperando al proveedor':'Visita / Ejecución realizada',
-    'En servicio técnico externo · esperando retorno':'Visita / Ejecución realizada',
+    'En servicio técnico externo · esperando retorno':'Retorno de Servicio Técnico',
+    'Retornado · por cerrar':'Cierre del expediente',
+    'Retornado sin reparar · evaluar':'Cotización solicitada',
     'Ejecutada · por cerrar':'Cierre del expediente'
   };
   return sig[etapaActualDe(x)]||'Cotización solicitada';
+}
+function ultimoEnvioDe(ot){
+  /* el retorno se conecta con el ÚLTIMO envío registrado del expediente (avance o evento antiguo) */
+  const folio=(ot.folioSigem||'').trim();
+  const cand=[
+    ...(ot.avances||[]).filter(a=>a.tipo==='Envío a Servicio Técnico').map(a=>({f:a.fecha||'', empresa:a.empresa||'', numero:a.numeroEnvio||''})),
+    ...state.correctivos.filter(c=>c!==ot && tipoEventoDe(c)==='Envío a Servicio Técnico' && folio!=='' && (c.folioSigem||'').trim()===folio).map(c=>({f:c.fechaDocumento||'', empresa:c.empresa||'', numero:c.numeroEnvio||''}))
+  ].sort((a,b)=>a.f.localeCompare(b.f));
+  return cand.length?cand[cand.length-1]:null;
+}
+function ultimaActualizacionEquipo(key){
+  /* fecha más reciente de cualquier registro de la app para el equipo */
+  const f=[];
+  state.manuales.forEach(m=>{ if(m.equipoKey===key){ f.push(m.fecha||'', m.actualizado||'', m.creado||''); } });
+  state.pendientes.forEach(p=>{ if(p.equipoKey===key){ f.push(p.creado||'', p.actualizado||''); } });
+  state.correctivos.forEach(c=>{
+    if(c.equipoKey!==key) return;
+    f.push(c.fechaDocumento||'', c.fechaCierre||'', c.actualizado||'', c.creado||'');
+    (c.avances||[]).forEach(a=>f.push(a.fecha||''));
+  });
+  return f.filter(Boolean).sort().pop()||'';
+}
+function calcularDerivadosEquipos(){
+  /* columnas calculadas de la tabla de equipos: estado, última actualización y pendientes */
+  const pendPorEq={};
+  state.pendientes.forEach(p=>{ if(p.estado!=='Completado') pendPorEq[p.equipoKey]=(pendPorEq[p.equipoKey]||0)+1; });
+  state.equipos.forEach(e=>{
+    e._estado = estadoActualEquipo(e.key)||'';
+    e._actualizado = ultimaActualizacionEquipo(e.key);
+    const n = pendPorEq[e.key]||0;
+    e._pend = n ? ('Sí ('+n+')') : 'No';
+  });
+}
+function filasPlanBase(){
+  /* Plan de Mantenimiento: una fila por evento de mantención (equipo + mes), planilla y app unificadas */
+  const regMap={}; state.registros.forEach(r=>{ regMap[r.equipoKey+'|'+r.mes]=r; });
+  const appMap={}; state.manuales.forEach(m=>{
+    if(m.fecha && m.fecha.startsWith('2026')){ const k=m.equipoKey+'|'+(parseInt(m.fecha.slice(5,7),10)-1); (appMap[k]=appMap[k]||[]).push(m); }
+  });
+  Object.values(appMap).forEach(l=>l.sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'')));
+  const rows=[];
+  state.equipos.forEach(e=>{
+    const meses=new Set(Object.keys(e.prog||{}).map(Number));
+    for(let m=0;m<12;m++) if(regMap[e.key+'|'+m]||appMap[e.key+'|'+m]) meses.add(m);
+    [...meses].sort((a,b)=>a-b).forEach(m=>{
+      const r=regMap[e.key+'|'+m]||null;
+      const apps=appMap[e.key+'|'+m]||[];
+      const ap=apps.length?apps[apps.length-1]:null;
+      const programa=(r&&r.programa)||(e.prog&&e.prog[m])||(ap&&ap.programacion)||'';
+      const resultado=(r&&r.resultado)||(ap&&ap.resultado)||'';
+      rows.push({ key:e.key, equipo:e.equipo||'', serie:e.serie||'', inventario:e.inventario||'', servicio:e.servicio||'',
+        mes:MESES[m], mesIdx:m, programa, resultado, fechaApp:ap?(ap.fecha||''):'',
+        registro:(r&&r.resultado)?'Oficial':(ap?(ap.tipoRegistro||'Borrador'):'Oficial'),
+        origen: r&&ap?'Planilla + App':(r?'Planilla':(ap?'App':'Planilla')) });
+    });
+  });
+  return rows;
 }
 function reaplicarAvances(ot){
   /* recalcula los campos estructurados desde la bitácora: el último avance (por fecha) de cada tipo manda */
@@ -1983,7 +2230,8 @@ function estadoActualEquipo(key){
     ...state.correctivos.filter(c=>c.equipoKey===key && c.estadoEquipo).map(c=>({f:c.fechaDocumento||'', est:estadoCorrectivoDe(c.estadoEquipo)})),
     ...state.correctivos.filter(c=>c.equipoKey===key && c.fechaCierre && c.estadoEquipoCierre).map(c=>({f:c.fechaCierre, est:c.estadoEquipoCierre})),
     ...state.correctivos.filter(c=>c.equipoKey===key).flatMap(c=>(c.avances||[]).filter(a=>a.estadoEquipoVisita).map(a=>({f:a.fecha||'', est:a.estadoEquipoVisita}))),
-    ...state.correctivos.filter(c=>c.equipoKey===key).flatMap(c=>(c.avances||[]).filter(a=>a.tipo==='Envío a Servicio Técnico').map(a=>({f:a.fecha||'', est:'Servicio Técnico'})))
+    ...state.correctivos.filter(c=>c.equipoKey===key).flatMap(c=>(c.avances||[]).filter(a=>a.tipo==='Envío a Servicio Técnico').map(a=>({f:a.fecha||'', est:'Servicio Técnico'}))),
+    ...state.correctivos.filter(c=>c.equipoKey===key).flatMap(c=>(c.avances||[]).filter(a=>a.tipo==='Retorno de Servicio Técnico' && a.estadoEquipoRetorno).map(a=>({f:a.fecha||'', est:a.estadoEquipoRetorno})))
   ].sort((a,b)=>b.f.localeCompare(a.f));
   return cand.length?cand[0].est:null;
 }
@@ -2071,7 +2319,7 @@ function renderExpedientesHTML(otsEq){
     });
     const avs=(x.ot.avances||[]).slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
     const bitacora = avs.length ? `<div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">${avs.map(a=>{
-      const extra=[a.informeNum?'Informe N° '+a.informeNum:'', a.ocNum?'OC '+a.ocNum:'', a.numeroEnvio?'Envío N° '+a.numeroEnvio+(a.empresa?' a '+a.empresa:''):'', a.estadoEquipoVisita?'Equipo '+a.estadoEquipoVisita+' tras la visita':'', a.estadoEquipoCierre?'Equipo '+a.estadoEquipoCierre+' al cierre':''].filter(Boolean).join(' · ');
+      const extra=[a.informeNum?'Informe N° '+a.informeNum:'', a.ocNum?'OC '+a.ocNum:'', a.numeroEnvio?'Envío N° '+a.numeroEnvio+(a.empresa?' a '+a.empresa:''):'', a.folioRetorno?'Retorno folio '+a.folioRetorno+(a.empresa?' de '+a.empresa:'')+(a.enviadoPor?' · enviado por '+a.enviadoPor:''):'', a.estadoEquipoRetorno?'Equipo '+a.estadoEquipoRetorno+' al retorno':'', a.estadoEquipoVisita?'Equipo '+a.estadoEquipoVisita+' tras la visita':'', a.estadoEquipoCierre?'Equipo '+a.estadoEquipoCierre+' al cierre':''].filter(Boolean).join(' · ');
       return `<div class="log-item" style="display:flex;gap:8px;align-items:flex-start">
         <div style="flex:1"><time>${fmtFecha(a.fecha)} · ${esc(a.tipo)}${a.registrado?' · registrado el '+esc(new Date(a.registrado).toLocaleString('es-CL')):''}${a.corregido?' · <span style="color:var(--ambar)">corregido el '+esc(new Date(a.corregido).toLocaleString('es-CL'))+'</span>':''}</time>${esc([a.detalle,extra].filter(Boolean).join(' — '))||'&nbsp;'}</div>
         <button class="btn mini" data-editar-av="${esc(x.ot.id)}" data-av="${esc(a.id||'')}" title="Corregir este avance">✎</button>
@@ -2135,6 +2383,11 @@ function abrirEdicionAvance(otId, avId){
   } else if(av.tipo==='Envío a Servicio Técnico'){
     if(av.empresa) $('#av-env-empresa').innerHTML=opcionesEmpresas(av.empresa);
     $('#av-env-numero').value=av.numeroEnvio||'';
+  } else if(av.tipo==='Retorno de Servicio Técnico'){
+    $('#av-ret-folio').value=av.folioRetorno||'';
+    if(av.empresa) $('#av-ret-empresa').innerHTML=opcionesEmpresas(av.empresa);
+    $('#av-ret-enviadopor').value=av.enviadoPor||'';
+    $('#av-ret-estado').value=av.estadoEquipoRetorno||'Operativo';
   } else if(av.tipo==='Visita / Ejecución realizada'){
     $('#av-visita-estado').value=av.estadoEquipoVisita||'Operativo';
   } else if(av.tipo==='Cierre del expediente'){
@@ -2192,6 +2445,19 @@ function renderAvExtra(){
       </div>
       <small style="color:var(--gris-4)">El equipo quedará en estado <strong>Servicio Técnico</strong> desde la fecha del envío, hasta su retorno (Visita / Ejecución) o cierre.</small>
     </div>`;
+  } else if(t==='Retorno de Servicio Técnico'){
+    const env=ot?ultimoEnvioDe(ot):null;
+    x.innerHTML=`<div class="sub-form">
+      ${env?`<div class="aviso" style="margin:0">↩ Retorna del <strong>envío N° ${esc(env.numero||'—')}</strong> a <strong>${esc(env.empresa||'—')}</strong> del ${fmtFecha(env.f)} · OT folio <strong>${esc(ot.folioSigem||'—')}</strong></div>`:'<div class="aviso ambar" style="margin:0">Este expediente no tiene envíos registrados.</div>'}
+      <div class="f-2col">
+        <div class="f-grupo"><label class="et">Folio de retorno <span class="req">*</span></label><input type="text" id="av-ret-folio" placeholder="N° guía / documento de retorno"></div>
+        <div class="f-grupo"><label class="et">Empresa <span class="req">*</span></label><select id="av-ret-empresa">${opcionesEmpresas(env?env.empresa:'')}</select></div>
+      </div>
+      <div class="f-2col">
+        <div class="f-grupo"><label class="et">Enviado por <span style="color:var(--gris-4);font-weight:400">(persona de la empresa, opcional)</span></label><input type="text" id="av-ret-enviadopor"></div>
+        <div class="f-grupo"><label class="et">¿Cómo quedó el equipo?</label><select id="av-ret-estado"><option>Operativo</option><option>No Operativo</option></select></div>
+      </div>
+    </div>`;
   } else if(t==='Visita / Ejecución realizada'){
     x.innerHTML=`<div class="sub-form"><div class="f-grupo"><label class="et">¿Cómo quedó el equipo tras la visita?</label><select id="av-visita-estado"><option>Operativo</option><option>No Operativo</option><option>Servicio Técnico</option></select></div></div>`;
   } else if(t==='Cierre del expediente'){
@@ -2211,6 +2477,11 @@ function capturarExtrasAvance(av, tipo){
   } else if(tipo==='Envío a Servicio Técnico'){
     const emp=$('#av-env-empresa').value; av.empresa = emp==='__nueva__'?'':emp;
     av.numeroEnvio=$('#av-env-numero').value.trim();
+  } else if(tipo==='Retorno de Servicio Técnico'){
+    av.folioRetorno=$('#av-ret-folio').value.trim();
+    const emp=$('#av-ret-empresa').value; av.empresa = emp==='__nueva__'?'':emp;
+    av.enviadoPor=$('#av-ret-enviadopor').value.trim();
+    av.estadoEquipoRetorno=$('#av-ret-estado').value;
   } else if(tipo==='Visita / Ejecución realizada'){
     av.estadoEquipoVisita=$('#av-visita-estado').value;
   } else if(tipo==='Cierre del expediente'){
@@ -2230,6 +2501,7 @@ function guardarAvance(){
     av.tipo=tipo; av.fecha=fecha; av.detalle=$('#av-detalle').value.trim();
     capturarExtrasAvance(av, tipo);
     if(tipo==='Envío a Servicio Técnico' && (!av.empresa||!av.numeroEnvio)){ toast('⚠️ Indica la empresa de destino y el N° de envío.'); return; }
+    if(tipo==='Retorno de Servicio Técnico' && (!av.folioRetorno||!av.empresa)){ toast('⚠️ Indica el folio de retorno y la empresa.'); return; }
     av.corregido=new Date().toISOString();
     limpiarTrasCambio(ot, tipoOriginal, fechaOriginal);
     reaplicarAvances(ot);
@@ -2239,6 +2511,7 @@ function guardarAvance(){
     const av={id:uid(), tipo, fecha, detalle:$('#av-detalle').value.trim(), registrado:new Date().toISOString()};
     capturarExtrasAvance(av, tipo);
     if(tipo==='Envío a Servicio Técnico' && (!av.empresa||!av.numeroEnvio)){ toast('⚠️ Indica la empresa de destino y el N° de envío.'); return; }
+    if(tipo==='Retorno de Servicio Técnico' && (!av.folioRetorno||!av.empresa)){ toast('⚠️ Indica el folio de retorno y la empresa.'); return; }
     aplicarAvance(ot, av);
     txtOk='✅ Avance registrado: '+tipo+'.';
   }
@@ -2606,6 +2879,24 @@ function conectarEventos(){
     if(b){ ev.stopPropagation(); (popCol===b.dataset.col)?cerrarPopover():abrirPopover(b.dataset.col,b); }
   });
   $('#tbody-equipos').addEventListener('click',ev=>{
+    const tr=ev.target.closest('tr[data-key]');
+    if(tr) abrirDetalle(tr.dataset.key);
+  });
+
+  /* Plan de Mantenimiento */
+  $('#busqueda-plan').addEventListener('input',ev=>{ busquedaPlan=ev.target.value; paginaPlan=0; cachePlanFil=null; renderPlan(); });
+  $('#btn-limpiar-plan').addEventListener('click',()=>{
+    filtrosPlan={}; ordenPlan={k:null,dir:1}; busquedaPlan=''; $('#busqueda-plan').value=''; paginaPlan=0; cachePlanFil=null; renderPlan();
+  });
+  $('#btn-exportar-plan').addEventListener('click',exportarPlan);
+  $('#plan-sel-pagina').addEventListener('change',()=>{ paginaPlan=0; renderPlan(); });
+  $('#plan-prev').addEventListener('click',()=>{ paginaPlan--; renderPlan(); });
+  $('#plan-next').addEventListener('click',()=>{ paginaPlan++; renderPlan(); });
+  $('#thead-plan').addEventListener('click',ev=>{
+    const b=ev.target.closest('.btn-filtro');
+    if(b){ ev.stopPropagation(); (popColPlan===b.dataset.planCol)?cerrarPopover():abrirPopoverPlan(b.dataset.planCol,b); }
+  });
+  $('#tbody-plan').addEventListener('click',ev=>{
     const tr=ev.target.closest('tr[data-key]');
     if(tr) abrirDetalle(tr.dataset.key);
   });
