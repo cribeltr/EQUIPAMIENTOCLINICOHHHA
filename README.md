@@ -20,9 +20,11 @@ No requiere instalación ni servidor. Los datos quedan guardados localmente en e
 | 4 | Lectura de la hoja `Registro_MP-2026` (datos desde fila 8; cada mes con columna **P** y columna **R**: Enero T/U … Diciembre AP/AQ; columna AR = Observación). Se ignoran valores no válidos (ceros de relleno, números sueltos como «22» o «27»). **Regla Oficial/Borrador:** lo leído de planilla es Oficial; un Borrador de la app pasa a Oficial si la mantención aparece al recargar la planilla, y conserva Borrador si no aparece. |
 | 5 | Interpretación de resultados: `Si`, `C1–C8`, `Si-RA`, `FS`, `No`, `NU`, `Baja` (con su significado visible en toda la app). |
 | 6 | Reglas de reprogramación: causales C1–C8 documentadas; al registrar `C2/C3/C4` la app indica que no se fija nueva fecha; con `C1/C5/C6/C7/C8` indica el plazo de 30 días (con fecha límite calculada) y sugiere crear la gestión pendiente. |
-| 7 | Vista de detalle del equipo con todos sus datos, programación/resultados por mes, historial y los botones **«Mantenimiento Preventivo»** y **«Pendientes»**. |
+| 7 | Vista de detalle del equipo con todos sus datos, programación/resultados por mes, historial y los tres botones **«Mantenimiento Preventivo»**, **«Pendientes»** y **«Mantenimiento Correctivo»**. |
 | 8 | Formulario de Mantenimiento Preventivo: fecha, programación (X/R/RA/PM), ejecutor (lista oficial de 11), resultado, observaciones, estado del equipo (Operativo / No Operativo), gestión pendiente (Sí/No) y tipo de registro (Oficial / Borrador). |
 | 9 | Formulario de Pendientes: fecha de compromiso con atajos (Hoy / 3 días / 1 semana), tipo de pendiente, descripción, lista de tareas, Responsable Administrativo (por defecto Cristián Beltrán Oviedo), Responsable Ejecutivo y bitácora de **gestión asociada**. Vista global de pendientes (abiertos / vencidos / completados). |
+| 10 | Formulario de Mantenimiento Correctivo: el botón despliega la lista de **Órdenes de Trabajo** del equipo (más «Nueva Orden de Trabajo»); cada orden registra Requerimiento (opcional), Fecha del documento, **Folio de Solicitud de SIGEM**, Técnico asignado (misma lista de ejecutores) y Estado del equipo (Operativo / No Operativo / Servicio). El estado más reciente (preventivo o correctivo) se refleja en la ficha del equipo. |
+| 11 | Descarga de registros y respaldo (ver sección siguiente). |
 
 Además incluye una pestaña **«Códigos y Reglas»** con las tablas de referencia de los pasos 3, 4, 5 y 6, y un botón **«Cargar datos de ejemplo»** para probar la aplicación sin la planilla real.
 
@@ -30,7 +32,7 @@ Además incluye una pestaña **«Códigos y Reglas»** con las tablas de referen
 
 En la pestaña **Carga de Datos** (sección «Descargas y respaldo», también accesible desde la vista de equipos con «⬇ Excel completo»):
 
-- **Descargar todos los registros (Excel):** genera `Registros_GMP2026_<fecha>.xlsx` con 4 hojas — *Equipos* (columnas del Paso 1), *Programación* (códigos X/R/RA/PM de los 12 meses), *Mantenciones* (registros de la planilla y de la aplicación, con ejecutor, observaciones, tipo Oficial/Borrador y origen) y *Pendientes* (con tareas y bitácora de gestión asociada). Todas las celdas son de texto para conservar los ceros a la izquierda.
+- **Descargar todos los registros (Excel):** genera `Registros_GMP2026_<fecha>.xlsx` con 5 hojas — *Equipos* (columnas del Paso 1), *Programación* (códigos X/R/RA/PM de los 12 meses), *Mantenciones* (registros de la planilla y de la aplicación, con ejecutor, observaciones, tipo Oficial/Borrador y origen), *Pendientes* (con tareas y bitácora de gestión asociada) y *Correctivos* (órdenes de trabajo con folio SIGEM, técnico y estado). Todas las celdas son de texto para conservar los ceros a la izquierda.
 - **Descargar respaldo (.json):** genera `Respaldo_GMP2026_<fecha>.json` con absolutamente todo el estado de la aplicación (planilla cargada, mantenciones, pendientes y metadatos).
 - **Restaurar respaldo:** carga un archivo de respaldo y reemplaza los datos actuales (pide confirmación y valida que el archivo sea un respaldo legítimo del sistema). Permite traspasar la información a otro computador o recuperarla si se limpió el navegador.
 

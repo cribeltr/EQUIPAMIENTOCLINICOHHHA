@@ -243,7 +243,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
       <input type="file" id="input-respaldo" accept=".json,application/json" style="display:none">
     </div>
     <div class="aviso" style="margin-top:14px">
-      📦 El <strong>Excel</strong> incluye 4 hojas — Equipos, Programación 2026, Mantenciones (planilla + aplicación) y Pendientes — con celdas de texto que conservan los ceros a la izquierda.
+      📦 El <strong>Excel</strong> incluye 5 hojas — Equipos, Programación 2026, Mantenciones (planilla + aplicación), Pendientes y Correctivos (órdenes de trabajo) — con celdas de texto que conservan los ceros a la izquierda.
       El <strong>respaldo .json</strong> guarda absolutamente todo (planilla cargada, borradores, tareas y gestión asociada de los pendientes) y se puede recuperar en este u otro computador con «Restaurar respaldo».
     </div>
   </div>
@@ -260,7 +260,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
       <span class="contador" id="contador-filas"></span>
       <span style="flex:1"></span>
       <button class="btn" id="btn-exportar" title="Exporta las filas visibles según los filtros aplicados">⬇ Exportar vista</button>
-      <button class="btn" id="btn-exportar-vista-todo" title="Equipos, programación, mantenciones y pendientes en un solo Excel">⬇ Excel completo</button>
+      <button class="btn" id="btn-exportar-vista-todo" title="Equipos, programación, mantenciones, pendientes y correctivos en un solo Excel">⬇ Excel completo</button>
     </div>
     <div class="envoltura-tabla">
       <table class="equipos">
@@ -291,6 +291,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
       <div class="det-acciones">
         <button class="btn primario" id="btn-abrir-mp">🔧 Mantenimiento Preventivo</button>
         <button class="btn" id="btn-abrir-pendiente">📋 Pendientes</button>
+        <button class="btn" id="btn-abrir-ot">🔩 Mantenimiento Correctivo</button>
       </div>
     </div>
     <div class="grid-campos" id="det-campos"></div>
@@ -311,6 +312,11 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
   <div class="card">
     <h2>Pendientes del equipo</h2>
     <div id="det-pendientes"></div>
+  </div>
+
+  <div class="card">
+    <h2>Mantenimiento Correctivo · Órdenes de Trabajo</h2>
+    <div id="det-correctivos"></div>
   </div>
 </section>
 
@@ -510,6 +516,55 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
   </div>
 </div>
 
+<!-- ============ MODAL: MANTENIMIENTO CORRECTIVO (Paso 10) ============ -->
+<div class="modal-fondo" id="modal-ot">
+  <div class="modal">
+    <div class="modal-cab">
+      <h2>🔩 Mantenimiento Correctivo<span class="sub-eq" id="ot-equipo-nombre"></span></h2>
+      <button class="cerrar" data-cerrar="modal-ot">✕</button>
+    </div>
+    <div class="modal-cuerpo">
+      <div class="f-grupo">
+        <label class="et">Orden de Trabajo</label>
+        <select id="ot-selector"></select>
+      </div>
+      <div class="f-grupo">
+        <label class="et">Requerimiento <span style="color:var(--gris-4);font-weight:400">(opcional)</span></label>
+        <input type="text" id="ot-requerimiento" placeholder="Describe el requerimiento de la orden de trabajo…">
+      </div>
+      <div class="f-2col">
+        <div class="f-grupo">
+          <label class="et">Fecha del documento <span class="req">*</span></label>
+          <input type="date" id="ot-fecha">
+        </div>
+        <div class="f-grupo">
+          <label class="et">Folio de Solicitud de SIGEM <span class="req">*</span></label>
+          <input type="text" id="ot-folio" placeholder="N° de folio SIGEM">
+        </div>
+      </div>
+      <div class="f-2col">
+        <div class="f-grupo">
+          <label class="et">Técnico asignado <span class="req">*</span></label>
+          <select id="ot-tecnico"><option value="">— Seleccionar —</option></select>
+        </div>
+        <div class="f-grupo">
+          <label class="et">Estado del equipo</label>
+          <select id="ot-estado">
+            <option value="Operativo">Operativo</option>
+            <option value="No Operativo">No Operativo</option>
+            <option value="Servicio">Servicio</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-pie">
+      <button class="btn peligro" id="ot-eliminar" style="display:none;margin-right:auto">🗑 Eliminar</button>
+      <button class="btn" data-cerrar="modal-ot">Cancelar</button>
+      <button class="btn primario" id="ot-guardar">💾 Guardar orden de trabajo</button>
+    </div>
+  </div>
+</div>
+
 <div id="filtro-pop"></div>
 <div id="toast"></div>
 
@@ -586,6 +641,7 @@ let state = {
   registros: [],    // Pasos 3-4 (planilla): {equipoKey, mes, programa, resultado, obs}
   manuales: [],     // Paso 8: registros guardados en la aplicación
   pendientes: [],   // Paso 9
+  correctivos: [],  // Paso 10: órdenes de trabajo de mantenimiento correctivo
   meta: null        // {archivo, fechaCarga, avisos...}
 };
 let filtros = {};                       // {campo: Set(valores)}
@@ -623,13 +679,13 @@ function chipResultado(c){
 /* ---------- Persistencia (localStorage) ---------- */
 const LS_DATOS='gmp2026.datos', LS_USUARIO='gmp2026.usuario';
 function guardar(){
-  try{ localStorage.setItem(LS_USUARIO, JSON.stringify({manuales:state.manuales, pendientes:state.pendientes})); }
+  try{ localStorage.setItem(LS_USUARIO, JSON.stringify({manuales:state.manuales, pendientes:state.pendientes, correctivos:state.correctivos})); }
   catch(e){ toast('⚠️ No fue posible guardar los registros de usuario (almacenamiento lleno).'); }
   try{ localStorage.setItem(LS_DATOS, JSON.stringify({equipos:state.equipos, registros:state.registros, meta:state.meta})); }
   catch(e){ /* la planilla puede superar la cuota: los datos de usuario ya quedaron a salvo */ }
 }
 function cargarLocal(){
-  try{ const u=JSON.parse(localStorage.getItem(LS_USUARIO)||'null'); if(u){ state.manuales=u.manuales||[]; state.pendientes=u.pendientes||[]; } }catch(e){}
+  try{ const u=JSON.parse(localStorage.getItem(LS_USUARIO)||'null'); if(u){ state.manuales=u.manuales||[]; state.pendientes=u.pendientes||[]; state.correctivos=u.correctivos||[]; } }catch(e){}
   try{ const d=JSON.parse(localStorage.getItem(LS_DATOS)||'null'); if(d){ state.equipos=d.equipos||[]; state.registros=d.registros||[]; state.meta=d.meta||null; } }catch(e){}
 }
 
@@ -878,7 +934,8 @@ function renderResumen(){
     [reprog,'Reprogramadas (C1–C8)'],
     [state.meta.oficializados,'Borradores actualizados a Oficial'],
     [state.manuales.length,'Registros creados en la app'],
-    [state.pendientes.filter(p=>p.estado!=='Completado').length,'Pendientes abiertos']
+    [state.pendientes.filter(p=>p.estado!=='Completado').length,'Pendientes abiertos'],
+    [state.correctivos.length,'Órdenes de trabajo (correctivo)']
   ];
   $('#resumen-kpis').innerHTML = kpis.map(k=>`<div class="kpi"><b>${k[0]}</b><span>${k[1]}</span></div>`).join('');
   $('#resumen-avisos').innerHTML =
@@ -1021,7 +1078,7 @@ document.addEventListener('click', ev=>{
   const pop=$('#filtro-pop');
   if(pop.style.display==='block' && !pop.contains(ev.target) && !ev.target.closest('.btn-filtro')) cerrarPopover();
 });
-document.addEventListener('keydown', ev=>{ if(ev.key==='Escape'){ cerrarPopover(); cerrarModal('modal-mp'); cerrarModal('modal-pend'); } });
+document.addEventListener('keydown', ev=>{ if(ev.key==='Escape'){ cerrarPopover(); cerrarModal('modal-mp'); cerrarModal('modal-pend'); cerrarModal('modal-ot'); } });
 
 /* ---------- Exportación (conserva ceros a la izquierda: celdas de texto) ---------- */
 function hojaTexto(aoa, anchos){
@@ -1045,7 +1102,7 @@ function exportarEquipos(){
 /* ---------- Descarga de TODOS los registros (Excel consolidado de 4 hojas) ---------- */
 function exportarTodo(){
   if(typeof XLSX==='undefined'){ toast('Librería XLSX no disponible.'); return; }
-  if(!state.equipos.length && !state.manuales.length && !state.pendientes.length){ toast('No hay datos para descargar.'); return; }
+  if(!state.equipos.length && !state.manuales.length && !state.pendientes.length && !state.correctivos.length){ toast('No hay datos para descargar.'); return; }
   const idx = new Map(state.equipos.map(e=>[e.key,e]));
   const eqCampo = (k,c) => { const e=idx.get(k); return e ? String(e[c]||'') : k; };
   const wb = XLSX.utils.book_new();
@@ -1089,18 +1146,29 @@ function exportarTodo(){
   XLSX.utils.book_append_sheet(wb, hojaTexto(filasP,
     [{wch:28},{wch:16},{wch:14},{wch:32},{wch:15},{wch:36},{wch:44},{wch:24},{wch:24},{wch:11},{wch:54},{wch:11}]), 'Pendientes');
 
+  /* Hoja 5: Correctivos — Órdenes de Trabajo (Paso 10) */
+  const filasC = [['Equipo','Serie','N° Inventario','Servicio','Orden de Trabajo','Requerimiento','Fecha documento','Folio Solicitud SIGEM','Técnico asignado','Estado del equipo','Creado']];
+  state.correctivos.slice().sort((a,b)=>(a.fechaDocumento||'').localeCompare(b.fechaDocumento||'')).forEach(c=>{
+    filasC.push([eqCampo(c.equipoKey,'equipo'),eqCampo(c.equipoKey,'serie'),eqCampo(c.equipoKey,'inventario'),eqCampo(c.equipoKey,'servicio'),
+      c.ordenTrabajo||'', c.requerimiento||'', fmtFecha(c.fechaDocumento), c.folioSigem||'',
+      c.tecnico||'', c.estadoEquipo||'', fmtFecha(c.creado)]);
+  });
+  XLSX.utils.book_append_sheet(wb, hojaTexto(filasC,
+    [{wch:28},{wch:16},{wch:14},{wch:18},{wch:22},{wch:40},{wch:15},{wch:18},{wch:24},{wch:14},{wch:11}]), 'Correctivos');
+
   XLSX.writeFile(wb, 'Registros_GMP2026_'+hoyISO()+'.xlsx');
-  toast('⬇ Excel completo descargado: Equipos, Programación, Mantenciones y Pendientes.');
+  toast('⬇ Excel completo descargado: Equipos, Programación, Mantenciones, Pendientes y Correctivos.');
 }
 
 /* ---------- Respaldo completo (.json) y restauración ---------- */
 function descargarRespaldo(){
-  if(!state.equipos.length && !state.manuales.length && !state.pendientes.length){ toast('No hay datos para respaldar.'); return; }
+  if(!state.equipos.length && !state.manuales.length && !state.pendientes.length && !state.correctivos.length){ toast('No hay datos para respaldar.'); return; }
   const datos = {
     app:'Sistema de Gestión MP 2026 — Equipamiento Clínico HHHA',
-    tipo:'respaldo-gmp2026', version:1, fecha:new Date().toISOString(),
+    tipo:'respaldo-gmp2026', version:2, fecha:new Date().toISOString(),
     equipos:state.equipos, registros:state.registros,
-    manuales:state.manuales, pendientes:state.pendientes, meta:state.meta
+    manuales:state.manuales, pendientes:state.pendientes,
+    correctivos:state.correctivos, meta:state.meta
   };
   const blob = new Blob([JSON.stringify(datos)], {type:'application/json'});
   const a = document.createElement('a');
@@ -1115,9 +1183,10 @@ async function restaurarRespaldo(file){
     const d = JSON.parse(await file.text());
     if(d.tipo!=='respaldo-gmp2026' || !Array.isArray(d.equipos) || !Array.isArray(d.manuales) || !Array.isArray(d.pendientes))
       throw new Error('El archivo seleccionado no es un respaldo válido del Sistema de Gestión MP 2026.');
-    const det = d.equipos.length+' equipos, '+(d.registros||[]).length+' registros de planilla, '+d.manuales.length+' mantenciones de la app y '+d.pendientes.length+' pendientes (generado: '+(d.fecha?new Date(d.fecha).toLocaleString('es-CL'):'—')+')';
+    const det = d.equipos.length+' equipos, '+(d.registros||[]).length+' registros de planilla, '+d.manuales.length+' mantenciones de la app, '+d.pendientes.length+' pendientes y '+(d.correctivos||[]).length+' órdenes de trabajo (generado: '+(d.fecha?new Date(d.fecha).toLocaleString('es-CL'):'—')+')';
     if(!confirm('Restaurar respaldo con '+det+'.\n\nEsto REEMPLAZARÁ todos los datos actuales de la aplicación. ¿Continuar?')) return;
-    state = {equipos:d.equipos, registros:d.registros||[], manuales:d.manuales, pendientes:d.pendientes, meta:d.meta||null};
+    /* d.correctivos puede no existir en respaldos de versiones anteriores */
+    state = {equipos:d.equipos, registros:d.registros||[], manuales:d.manuales, pendientes:d.pendientes, correctivos:d.correctivos||[], meta:d.meta||null};
     filtros={}; orden={k:null,dir:1}; busqueda=''; pagina=0; detalleKey=null; invalidar();
     $('#busqueda-global').value='';
     guardar(); renderTodo(); mostrarVista(state.equipos.length?'equipos':'carga');
@@ -1138,14 +1207,22 @@ function renderDetalle(key){
   if(!e){ mostrarVista('equipos'); return; }
   $('#det-titulo').textContent = e.equipo || '(Equipo sin nombre)';
   const manualesEq = state.manuales.filter(m=>m.equipoKey===key).sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
-  const ultimo = manualesEq[0];
+  const otsEq = state.correctivos.filter(c=>c.equipoKey===key).sort((a,b)=>(b.fechaDocumento||'').localeCompare(a.fechaDocumento||''));
+  /* Estado del equipo: el registro más reciente entre MP (Paso 8) y OT correctiva (Paso 10) */
+  const candEstado = [
+    ...manualesEq.map(m=>({f:m.fecha||'', est:m.estadoEquipo})),
+    ...otsEq.map(c=>({f:c.fechaDocumento||'', est:c.estadoEquipo}))
+  ].filter(x=>x.est).sort((a,b)=>b.f.localeCompare(a.f));
+  const estadoActual = candEstado.length?candEstado[0].est:null;
   const chips=[];
   if(e.servicio) chips.push(`<span class="chip azul">${esc(e.servicio)}</span>`);
   if(e.clasificacion) chips.push(`<span class="chip morado">${esc(e.clasificacion)}</span>`);
   if(valorUtil(e.enu)) chips.push(`<span class="chip negro">ENU/Baja: ${esc(e.enu)}</span>`);
-  if(ultimo) chips.push(ultimo.estadoEquipo==='Operativo'
+  if(estadoActual) chips.push(estadoActual==='Operativo'
     ? '<span class="chip verde">✔ Operativo</span>'
-    : '<span class="chip rojo">✖ No Operativo</span>');
+    : estadoActual==='Servicio'
+      ? '<span class="chip ambar">🔧 Servicio</span>'
+      : '<span class="chip rojo">✖ No Operativo</span>');
   chips.push(`<span class="chip gris">Identificador: ${esc(key)}</span>`);
   $('#det-chips').innerHTML = chips.join('');
   $('#det-campos').innerHTML = CAMPOS.map(c=>`<div class="campo-box"><label>${esc(c.l)}</label><div>${esc(e[c.k])||'—'}</div></div>`).join('');
@@ -1200,6 +1277,19 @@ function renderDetalle(key){
   /* Pendientes del equipo */
   const pendEq = state.pendientes.filter(p=>p.equipoKey===key);
   $('#det-pendientes').innerHTML = pendEq.length ? tablaPendientes(pendEq) : '<div class="vacio">Sin pendientes para este equipo. Usa el botón «📋 Pendientes» para crear uno.</div>';
+
+  /* Órdenes de trabajo de mantenimiento correctivo (Paso 10) */
+  $('#det-correctivos').innerHTML = otsEq.length ? `<table class="lista">
+    <tr><th>Orden de Trabajo</th><th>Fecha doc.</th><th>Folio SIGEM</th><th>Requerimiento</th><th>Técnico asignado</th><th>Estado equipo</th><th></th></tr>
+    ${otsEq.map(c=>`<tr>
+      <td><strong>${esc(c.ordenTrabajo||'OT')}</strong></td>
+      <td>${fmtFecha(c.fechaDocumento)}</td>
+      <td>${esc(c.folioSigem)||'—'}</td>
+      <td style="max-width:300px">${esc(c.requerimiento)||'—'}</td>
+      <td>${esc(c.tecnico)}</td>
+      <td>${c.estadoEquipo==='Operativo'?'<span class="chip verde">Operativo</span>':c.estadoEquipo==='Servicio'?'<span class="chip ambar">Servicio</span>':'<span class="chip rojo">No Operativo</span>'}</td>
+      <td style="white-space:nowrap"><button class="btn mini" data-editar-ot="${c.id}">✎</button> <button class="btn mini peligro" data-borrar-ot="${c.id}">🗑</button></td></tr>`).join('')}
+  </table>` : '<div class="vacio">Sin órdenes de trabajo. Usa el botón «🔩 Mantenimiento Correctivo» para crear una.</div>';
 }
 
 /* =====================================================================
@@ -1341,6 +1431,52 @@ function eliminarPendiente(){
   guardar(); cerrarModal('modal-pend'); peEditando=null; renderTodo(); toast('🗑 Pendiente eliminado.');
 }
 
+/* =====================================================================
+   PASO 10 — FORMULARIO DE MANTENIMIENTO CORRECTIVO (Órdenes de Trabajo)
+   ===================================================================== */
+let otEditando=null;
+function abrirModalOT(equipoKey, ot){
+  const e=equipoPorKey(equipoKey); if(!e) return;
+  $('#ot-equipo-nombre').textContent = `${e.equipo} · Serie ${e.serie||'—'} · Inv. ${e.inventario||'—'}`;
+  /* Lista desplegable con las opciones de Orden de Trabajo del equipo (Paso 10) */
+  const ots = state.correctivos.filter(c=>c.equipoKey===equipoKey).sort((a,b)=>(b.fechaDocumento||'').localeCompare(a.fechaDocumento||''));
+  $('#ot-selector').innerHTML = '<option value="">➕ Nueva Orden de Trabajo</option>' +
+    ots.map(c=>`<option value="${c.id}">${esc(c.ordenTrabajo||'OT')} · Folio ${esc(c.folioSigem||'—')} · ${fmtFecha(c.fechaDocumento)}</option>`).join('');
+  $('#ot-selector').value = ot?ot.id:'';
+  cargarFormOT(ot||null);
+  $('#modal-ot').dataset.equipo=equipoKey;
+  $('#modal-ot').classList.add('abierto');
+}
+function cargarFormOT(ot){
+  otEditando = ot||null;
+  $('#ot-requerimiento').value = ot?(ot.requerimiento||''):'';
+  $('#ot-fecha').value = ot?(ot.fechaDocumento||''):hoyISO();
+  $('#ot-folio').value = ot?(ot.folioSigem||''):'';
+  $('#ot-tecnico').value = ot?(ot.tecnico||''):'';
+  $('#ot-estado').value = ot?(ot.estadoEquipo||'Operativo'):'Operativo';
+  $('#ot-eliminar').style.display = ot?'':'none';
+}
+function guardarOT(){
+  const equipoKey=$('#modal-ot').dataset.equipo;
+  const fecha=$('#ot-fecha').value, folio=$('#ot-folio').value.trim(), tec=$('#ot-tecnico').value;
+  if(!fecha||!folio||!tec){ toast('⚠️ Completa fecha del documento, Folio de Solicitud de SIGEM y técnico asignado.'); return; }
+  const datos={ equipoKey, requerimiento:$('#ot-requerimiento').value.trim(), fechaDocumento:fecha,
+    folioSigem:folio, tecnico:tec, estadoEquipo:$('#ot-estado').value||'Operativo' };
+  if(otEditando){ Object.assign(otEditando, datos, {actualizado:hoyISO()}); toast('✅ Orden de trabajo actualizada.'); }
+  else {
+    const n = state.correctivos.filter(c=>c.equipoKey===equipoKey).length+1;
+    state.correctivos.push(Object.assign({id:uid(), ordenTrabajo:'OT N° '+n, creado:hoyISO()}, datos));
+    toast('✅ Orden de trabajo creada.');
+  }
+  guardar(); cerrarModal('modal-ot'); otEditando=null; renderTodo();
+}
+function eliminarOT(){
+  if(!otEditando) return;
+  if(!confirm('¿Eliminar esta orden de trabajo de mantenimiento correctivo?')) return;
+  state.correctivos = state.correctivos.filter(c=>c.id!==otEditando.id);
+  guardar(); cerrarModal('modal-ot'); otEditando=null; renderTodo(); toast('🗑 Orden de trabajo eliminada.');
+}
+
 /* ---------- Vista global de pendientes ---------- */
 function tablaPendientes(lista){
   const hoy=hoyISO();
@@ -1391,6 +1527,7 @@ function poblarSelects(){
   $('#mp-ejecutor').innerHTML = '<option value="">— Seleccionar —</option>'+opEj;
   $('#pe-resp-adm').innerHTML = opEj;
   $('#pe-resp-eje').innerHTML = '<option value="">— Seleccionar —</option>'+opEj;
+  $('#ot-tecnico').innerHTML = '<option value="">— Seleccionar —</option>'+opEj;
   $('#pe-resp-adm').value = RESP_ADM_DEFECTO;
   $('#mp-resultado').innerHTML = '<option value="">— Seleccionar —</option>'+
     ORDEN_RESULTADOS.map(c=>`<option value="${c}">${c} — ${esc(RESULTADOS[c].length>60?RESULTADOS[c].slice(0,60)+'…':RESULTADOS[c])}</option>`).join('');
@@ -1416,7 +1553,7 @@ function conectarEventos(){
   $('#btn-borrar-todo').addEventListener('click',()=>{
     if(!confirm('Esto eliminará TODOS los datos almacenados en este navegador (planilla cargada, registros de la app y pendientes). ¿Continuar?')) return;
     localStorage.removeItem(LS_DATOS); localStorage.removeItem(LS_USUARIO);
-    state={equipos:[],registros:[],manuales:[],pendientes:[],meta:null};
+    state={equipos:[],registros:[],manuales:[],pendientes:[],correctivos:[],meta:null};
     filtros={}; orden={k:null,dir:1}; busqueda=''; pagina=0; detalleKey=null; invalidar();
     $('#busqueda-global').value='';
     renderTodo(); mostrarVista('carga'); toast('🗑 Datos eliminados.');
@@ -1450,6 +1587,7 @@ function conectarEventos(){
   /* Detalle */
   $('#btn-abrir-mp').addEventListener('click',()=>abrirModalMP(detalleKey,null));
   $('#btn-abrir-pendiente').addEventListener('click',()=>abrirModalPendiente(detalleKey,null,null));
+  $('#btn-abrir-ot').addEventListener('click',()=>abrirModalOT(detalleKey,null));
   $('#vista-detalle').addEventListener('click',ev=>{
     const ed=ev.target.closest('[data-editar-mp]');
     if(ed){ const r=state.manuales.find(m=>m.id===ed.dataset.editarMp); if(r) abrirModalMP(r.equipoKey,r); return; }
@@ -1461,9 +1599,27 @@ function conectarEventos(){
       }
       return;
     }
+    const eo=ev.target.closest('[data-editar-ot]');
+    if(eo){ const c=state.correctivos.find(x=>x.id===eo.dataset.editarOt); if(c) abrirModalOT(c.equipoKey,c); return; }
+    const bc=ev.target.closest('[data-borrar-ot]');
+    if(bc){
+      const c=state.correctivos.find(x=>x.id===bc.dataset.borrarOt);
+      if(c && confirm('¿Eliminar esta orden de trabajo de mantenimiento correctivo?')){
+        state.correctivos=state.correctivos.filter(x=>x.id!==c.id); guardar(); renderTodo(); toast('🗑 Orden de trabajo eliminada.');
+      }
+      return;
+    }
     const tp=ev.target.closest('tr[data-pendiente]');
     if(tp){ const p=state.pendientes.find(x=>x.id===tp.dataset.pendiente); if(p) abrirModalPendiente(p.equipoKey,p,null); }
   });
+
+  /* Modal Mantenimiento Correctivo (Paso 10) */
+  $('#ot-selector').addEventListener('change',ev=>{
+    const c=state.correctivos.find(x=>x.id===ev.target.value);
+    cargarFormOT(c||null);
+  });
+  $('#ot-guardar').addEventListener('click',guardarOT);
+  $('#ot-eliminar').addEventListener('click',eliminarOT);
 
   /* Modal MP */
   $('#mp-resultado').addEventListener('change',actualizarHintMP);
