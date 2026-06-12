@@ -594,20 +594,32 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
           <option value="Compra Ágil">Compra Ágil</option>
         </select>
       </div>
-      <div class="sub-form" id="ot-td" style="display:none">
-        <div class="f-2col">
-          <div class="f-grupo">
-            <label class="et">N° de informe técnico <span class="req">*</span></label>
-            <input type="text" id="ot-informe-num" placeholder="N° del informe técnico">
+      <div class="sub-form" id="ot-compra-det" style="display:none">
+        <div id="ot-td-campos" style="display:none;flex-direction:column;gap:12px">
+          <div class="f-2col">
+            <div class="f-grupo">
+              <label class="et">N° de informe técnico <span class="req">*</span></label>
+              <input type="text" id="ot-informe-num" placeholder="N° del informe técnico">
+            </div>
+            <div class="f-grupo">
+              <label class="et">Fecha de informe técnico <span class="req">*</span></label>
+              <input type="date" id="ot-informe-fecha">
+            </div>
           </div>
-          <div class="f-grupo">
-            <label class="et">Fecha de informe técnico <span class="req">*</span></label>
-            <input type="date" id="ot-informe-fecha">
+          <div class="f-2col">
+            <div class="f-grupo">
+              <label class="et">Responsable del informe técnico <span class="req">*</span></label>
+              <select id="ot-informe-resp"><option value="">— Seleccionar —</option></select>
+            </div>
+            <div class="f-grupo">
+              <label class="et">Empresa <span class="req">*</span></label>
+              <select id="ot-empresa"></select>
+            </div>
           </div>
         </div>
         <div class="f-grupo">
-          <label class="et">Empresa <span class="req">*</span></label>
-          <select id="ot-empresa"></select>
+          <label class="et">N° de orden de compra <span style="color:var(--gris-4);font-weight:400">(opcional)</span></label>
+          <input type="text" id="ot-oc-num" placeholder="Ej: 1488-466-TD26">
         </div>
       </div>
       <div class="f-2col">
@@ -1214,16 +1226,17 @@ function exportarTodo(){
     [{wch:28},{wch:16},{wch:14},{wch:32},{wch:15},{wch:36},{wch:44},{wch:24},{wch:24},{wch:11},{wch:54},{wch:11}]), 'Pendientes');
 
   /* Hoja 5: Correctivos — eventos del Paso 10 (OT / Reporte / Envío a ST) */
-  const filasC = [['Equipo','Serie','N° Inventario','Servicio','Tipo de evento','Requerimiento','Fecha documento','Folio Solicitud SIGEM','Técnico asignado','Estado del equipo','Tipo de compra','N° informe técnico','Fecha informe técnico','Empresa','Gestión pendiente','Tipo registro','Creado']];
+  const filasC = [['Equipo','Serie','N° Inventario','Servicio','Tipo de evento','Requerimiento','Fecha documento','Folio Solicitud SIGEM','Técnico asignado','Estado del equipo','Tipo de compra','N° informe técnico','Fecha informe técnico','Responsable informe técnico','Empresa','N° orden de compra','Gestión pendiente','Tipo registro','Creado']];
   state.correctivos.slice().sort((a,b)=>(a.fechaDocumento||'').localeCompare(b.fechaDocumento||'')).forEach(c=>{
     filasC.push([eqCampo(c.equipoKey,'equipo'),eqCampo(c.equipoKey,'serie'),eqCampo(c.equipoKey,'inventario'),eqCampo(c.equipoKey,'servicio'),
       tipoEventoDe(c), c.requerimiento||'', fmtFecha(c.fechaDocumento), c.folioSigem||'',
       c.tecnico||'', estadoCorrectivoDe(c.estadoEquipo),
-      c.tipoCompra||'', c.informeTecnicoNum||'', c.informeTecnicoFecha?fmtFecha(c.informeTecnicoFecha):'', c.empresa||'',
+      c.tipoCompra||'', c.informeTecnicoNum||'', c.informeTecnicoFecha?fmtFecha(c.informeTecnicoFecha):'',
+      c.informeTecnicoResp||'', c.empresa||'', c.ordenCompraNum||'',
       c.gestionPendiente?'Sí':'No', c.tipoRegistro||'Oficial', fmtFecha(c.creado)]);
   });
   XLSX.utils.book_append_sheet(wb, hojaTexto(filasC,
-    [{wch:28},{wch:16},{wch:14},{wch:18},{wch:24},{wch:36},{wch:15},{wch:18},{wch:24},{wch:16},{wch:14},{wch:16},{wch:16},{wch:26},{wch:9},{wch:12},{wch:11}]), 'Correctivos');
+    [{wch:28},{wch:16},{wch:14},{wch:18},{wch:24},{wch:36},{wch:15},{wch:18},{wch:24},{wch:16},{wch:14},{wch:16},{wch:16},{wch:24},{wch:26},{wch:18},{wch:9},{wch:12},{wch:11}]), 'Correctivos');
 
   XLSX.writeFile(wb, 'Registros_GMP2026_'+hoyISO()+'.xlsx');
   toast('⬇ Excel completo descargado: Equipos, Programación, Mantenciones, Pendientes y Correctivos.');
@@ -1352,9 +1365,10 @@ function renderDetalle(key){
     <tr><th>Tipo de evento</th><th>Fecha doc.</th><th>Folio SIGEM</th><th>Requerimiento</th><th>Técnico asignado</th><th>Compra</th><th>Estado equipo</th><th>Registro</th><th></th></tr>
     ${otsEq.map(c=>{
       const est = estadoCorrectivoDe(c.estadoEquipo);
+      const ocLinea = c.ordenCompraNum ? `<br><small style="color:var(--gris-4)">OC ${esc(c.ordenCompraNum)}</small>` : '';
       const compra = c.tipoCompra==='Trato Directo'
-        ? `<span class="chip cian">Trato Directo</span><br><small style="color:var(--gris-4)">Informe ${esc(c.informeTecnicoNum||'—')} · ${fmtFecha(c.informeTecnicoFecha)}<br>${esc(c.empresa||'—')}</small>`
-        : c.tipoCompra==='Compra Ágil' ? '<span class="chip cian">Compra Ágil</span>' : '—';
+        ? `<span class="chip cian">Trato Directo</span><br><small style="color:var(--gris-4)">Informe ${esc(c.informeTecnicoNum||'—')} · ${fmtFecha(c.informeTecnicoFecha)}${c.informeTecnicoResp?'<br>Resp.: '+esc(c.informeTecnicoResp):''}<br>${esc(c.empresa||'—')}</small>`+ocLinea
+        : c.tipoCompra==='Compra Ágil' ? '<span class="chip cian">Compra Ágil</span>'+ocLinea : '—';
       return `<tr>
       <td><strong>${esc(tipoEventoDe(c))}</strong></td>
       <td>${fmtFecha(c.fechaDocumento)}</td>
@@ -1533,6 +1547,11 @@ function renderEmpresaSelect(sel){
     '<option value="__nueva__">➕ Agregar nueva empresa…</option>';
   $('#ot-empresa').value = sel||'';
 }
+function toggleCompraUI(){
+  const tc=$('#ot-compra').value;
+  $('#ot-compra-det').style.display = tc ? '' : 'none';
+  $('#ot-td-campos').style.display = tc==='Trato Directo' ? 'flex' : 'none';
+}
 function cargarFormOT(ot){
   otEditando = ot||null;
   $('#ot-tipo-evento').value = ot?tipoEventoDe(ot):'Orden de Trabajo';
@@ -1544,8 +1563,10 @@ function cargarFormOT(ot){
   $('#ot-compra').value = ot?(ot.tipoCompra||''):'';
   $('#ot-informe-num').value = ot?(ot.informeTecnicoNum||''):'';
   $('#ot-informe-fecha').value = ot?(ot.informeTecnicoFecha||''):'';
+  $('#ot-informe-resp').value = ot?(ot.informeTecnicoResp||''):'';
+  $('#ot-oc-num').value = ot?(ot.ordenCompraNum||''):'';
   renderEmpresaSelect(ot?(ot.empresa||''):'');
-  $('#ot-td').style.display = $('#ot-compra').value==='Trato Directo' ? '' : 'none';
+  toggleCompraUI();
   setToggle('ot-tipo-reg', ot?(ot.tipoRegistro||'Oficial'):'Oficial', CLASES_TIPO);
   $('#ot-gestion').checked = ot?!!ot.gestionPendiente:false;
   $('#ot-gestion-txt').textContent = $('#ot-gestion').checked?'Sí':'No';
@@ -1556,19 +1577,24 @@ function guardarOT(){
   const tipoEvento=$('#ot-tipo-evento').value, fecha=$('#ot-fecha').value,
         folio=$('#ot-folio').value.trim(), tec=$('#ot-tecnico').value;
   if(!tipoEvento||!fecha||!folio||!tec){ toast('⚠️ Completa tipo de evento, fecha, Folio de Solicitud de SIGEM y técnico asignado.'); return; }
-  /* Tipo de compra: Trato Directo exige informe técnico y empresa */
+  /* Tipo de compra: Trato Directo exige informe técnico (n°, fecha, responsable) y empresa */
   const tipoCompra=$('#ot-compra').value;
-  let informeNum='', informeFecha='', empresa='';
+  let informeNum='', informeFecha='', informeResp='', empresa='', ordenCompraNum='';
+  if(tipoCompra){
+    ordenCompraNum=$('#ot-oc-num').value.trim();
+  }
   if(tipoCompra==='Trato Directo'){
     informeNum=$('#ot-informe-num').value.trim();
     informeFecha=$('#ot-informe-fecha').value;
+    informeResp=$('#ot-informe-resp').value;
     empresa=$('#ot-empresa').value==='__nueva__' ? '' : $('#ot-empresa').value;
-    if(!informeNum||!informeFecha||!empresa){ toast('⚠️ Para Trato Directo completa N° de informe técnico, fecha del informe y empresa.'); return; }
+    if(!informeNum||!informeFecha||!informeResp||!empresa){ toast('⚠️ Para Trato Directo completa N° de informe técnico, fecha, responsable del informe y empresa.'); return; }
   }
   const datos={ equipoKey, tipoEvento, requerimiento:$('#ot-requerimiento').value.trim(),
     fechaDocumento:fecha, folioSigem:folio, tecnico:tec,
     estadoEquipo:$('#ot-estado').value||'Operativo',
-    tipoCompra, informeTecnicoNum:informeNum, informeTecnicoFecha:informeFecha, empresa,
+    tipoCompra, informeTecnicoNum:informeNum, informeTecnicoFecha:informeFecha,
+    informeTecnicoResp:informeResp, empresa, ordenCompraNum,
     gestionPendiente:$('#ot-gestion').checked,
     tipoRegistro:valToggle('ot-tipo-reg')||'Oficial' };
   const esNuevo = !otEditando;
@@ -1638,6 +1664,7 @@ function poblarSelects(){
   $('#pe-resp-adm').innerHTML = opEj;
   $('#pe-resp-eje').innerHTML = '<option value="">— Seleccionar —</option>'+opEj;
   $('#ot-tecnico').innerHTML = '<option value="">— Seleccionar —</option>'+opEj;
+  $('#ot-informe-resp').innerHTML = '<option value="">— Seleccionar —</option>'+opEj;
   $('#pe-resp-adm').value = RESP_ADM_DEFECTO;
   $('#mp-resultado').innerHTML = '<option value="">— Seleccionar —</option>'+
     ORDEN_RESULTADOS.map(c=>`<option value="${c}">${c} — ${esc(RESULTADOS[c].length>60?RESULTADOS[c].slice(0,60)+'…':RESULTADOS[c])}</option>`).join('');
@@ -1724,7 +1751,7 @@ function conectarEventos(){
   });
 
   /* Modal Mantenimiento Correctivo (Paso 10) */
-  $('#ot-compra').addEventListener('change',()=>{ $('#ot-td').style.display = $('#ot-compra').value==='Trato Directo' ? '' : 'none'; });
+  $('#ot-compra').addEventListener('change',toggleCompraUI);
   $('#ot-empresa').addEventListener('change',ev=>{
     if(ev.target.value!=='__nueva__') return;
     const nombre=(prompt('Nombre de la nueva empresa:')||'').trim();
