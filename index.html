@@ -1725,56 +1725,88 @@ function nodosExpediente(exp){
   const ot = exp.evs.find(c=>tipoEventoDe(c)==='Orden de Trabajo') || exp.evs[0];
   const otros = exp.evs.filter(c=>c!==ot);
   const cerrado = estadoEventoDe(ot)==='Cerrado';
-  const n=[{et:'Apertura', sub:tipoEventoDe(ot), fecha:ot.fechaDocumento||'', done:true}];
-  const fCotS=avanceFechaDe(ot,'Cotización solicitada'), fCotR=avanceFechaDe(ot,'Cotización recibida'), fEnv=avanceFechaDe(ot,'OC enviada a proveedor');
-  if(fCotS) n.push({et:'Cotización solicitada', sub:'', fecha:fCotS, done:true});
-  if(fCotR) n.push({et:'Cotización recibida', sub:'', fecha:fCotR, done:true});
+  const RANGO={'Apertura':0,'Cotización solicitada':1,'Cotización recibida':2,'Informe técnico':3,'OC emitida':4,'Orden de compra':4,'OC enviada':5,'Ejecución':6,'Envío a ST':6,'Cierre':7};
+  /* hitos realizados */
+  const hechos=[{et:'Apertura', sub:tipoEventoDe(ot), fecha:ot.fechaDocumento||'', done:true}];
+  (ot.avances||[]).forEach(a=>{
+    if(a.tipo==='Cotización solicitada') hechos.push({et:'Cotización solicitada', sub:'', fecha:a.fecha||'', done:true});
+    else if(a.tipo==='Cotización recibida') hechos.push({et:'Cotización recibida', sub:'', fecha:a.fecha||'', done:true});
+    else if(a.tipo==='OC enviada a proveedor') hechos.push({et:'OC enviada', sub:'', fecha:a.fecha||'', done:true});
+    else if(a.tipo==='Visita / Ejecución realizada') hechos.push({et:'Ejecución', sub:'Visita', fecha:a.fecha||'', done:true});
+  });
   const hayInf = !!(ot.informeTecnicoFecha||ot.informeTecnicoNum);
   const hayOC  = !!(ot.ordenCompraFecha||ot.ordenCompraNum);
-  if(hayInf) n.push({et:'Informe técnico', sub:ot.informeTecnicoNum?('N° '+ot.informeTecnicoNum):'', fecha:ot.informeTecnicoFecha||'', done:true});
-  else if(!cerrado) n.push({et:'Informe técnico', sub:'', fecha:'', done:false});
-  if(hayOC) n.push({et:'OC emitida', sub:ot.ordenCompraNum||'', fecha:ot.ordenCompraFecha||'', done:true});
-  else if(!cerrado) n.push({et:'Orden de compra', sub:'', fecha:'', done:false});
-  if(fEnv) n.push({et:'OC enviada', sub:'', fecha:fEnv, done:true});
-  const visitas=(ot.avances||[]).filter(a=>a.tipo==='Visita / Ejecución realizada').sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
-  if(otros.length||visitas.length){
-    otros.forEach(r=>n.push({et:tipoEventoDe(r)==='Envío a Servicio Técnico'?'Envío a ST':'Ejecución', sub:tipoEventoDe(r), fecha:r.fechaDocumento||'', done:true}));
-    visitas.forEach(v=>n.push({et:'Ejecución', sub:'Visita', fecha:v.fecha||'', done:true}));
-  } else if(!cerrado) n.push({et:'Ejecución', sub:'', fecha:'', done:false});
-  n.push(cerrado ? {et:'Cierre', sub:'', fecha:ot.fechaCierre||'', done:true} : {et:'Cierre', sub:'', fecha:'', done:false});
-  const critico = equipoDetenidoEn(ot);
-  const dias = ot.fechaDocumento ? diasEntre(ot.fechaDocumento, cerrado ? (ot.fechaCierre||ot.fechaDocumento) : hoyISO()) : 0;
-  return {ot, folio:exp.folio, nodos:n, cerrado, critico, dias};
+  if(hayInf) hechos.push({et:'Informe técnico', sub:ot.informeTecnicoNum?('N° '+ot.informeTecnicoNum):'', fecha:ot.informeTecnicoFecha||'', done:true});
+  if(hayOC) hechos.push({et:'OC emitida', sub:ot.ordenCompraNum||'', fecha:ot.ordenCompraFecha||'', done:true});
+  otros.forEach(r=>hechos.push({et:tipoEventoDe(r)==='Envío a Servicio Técnico'?'Envío a ST':'Ejecución', sub:tipoEventoDe(r), fecha:r.fechaDocumento||'', done:true}));
+  if(cerrado) hechos.push({et:'Cierre', sub:'', fecha:ot.fechaCierre||'', done:true});
+  /* la línea de tiempo cuenta la historia real: orden por fecha (la etapa canónica desempata) */
+  hechos.sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'') || (RANGO[a.et]||0)-(RANGO[b.et]||0));
+  const n=hechos.slice();
+  if(!cerrado){
+    if(!hayInf) n.push({et:'Informe técnico', sub:'', fecha:'', done:false});
+    if(!hayOC) n.push({et:'Orden de compra', sub:'', fecha:'', done:false});
+    if(!hechos.some(h=>h.et==='Ejecución'||h.et==='Envío a ST')) n.push({et:'Ejecución', sub:'', fecha:'', done:false});
+    n.push({et:'Cierre', sub:'', fecha:'', done:false});
+  }
+  /* criticidad y días de detención según la racha VIGENTE de estado del equipo */
+  const estados=[{f:ot.fechaDocumento||'', est:estadoCorrectivoDe(ot.estadoEquipo)},
+    ...(ot.avances||[]).filter(a=>a.estadoEquipoVisita).map(a=>({f:a.fecha||'', est:a.estadoEquipoVisita})),
+    ...(cerrado&&ot.estadoEquipoCierre?[{f:ot.fechaCierre||'', est:ot.estadoEquipoCierre}]:[])
+  ].sort((a,b)=>a.f.localeCompare(b.f));
+  let iniDet='';
+  for(let i=estados.length-1;i>=0;i--){ if(estados[i].est==='Operativo') break; iniDet=estados[i].f; }
+  const critico = cerrado ? equipoDetenidoEn(ot) : (estados[estados.length-1].est!=='Operativo');
+  const dias = cerrado
+    ? (ot.fechaDocumento ? diasEntre(ot.fechaDocumento, ot.fechaCierre||ot.fechaDocumento) : 0)
+    : (critico && iniDet ? diasEntre(iniDet, hoyISO())
+       : (ot.fechaDocumento ? diasEntre(ot.fechaDocumento, hoyISO()) : 0));
+  return {ot, folio:exp.folio, nodos:n, cerrado, critico, dias, iniDet};
 }
+const ETAPAS_RANGO={'Cotización solicitada':1,'Cotización recibida':2,'Informe técnico':3,'OC emitida':4,'OC enviada':5,'Ejecución':6,'Envío a ST':6};
+const ETAPAS_TXT={1:'Cotización solicitada · esperando respuesta',2:'Cotización recibida · por elaborar informe',3:'Informe emitido · por emitir OC',4:'OC emitida · por enviar al proveedor',5:'OC enviada · esperando al proveedor',6:'Ejecutada · por cerrar'};
 function etapaActualDe(x){
+  /* la etapa corresponde al ÚLTIMO hito registrado (por fecha; el rango canónico desempata) */
   if(x.cerrado) return 'Cerrada';
-  const ot=x.ot;
-  /* una compra posterior a la última ejecución (repuesto adicional) devuelve la etapa a la compra */
-  const ultEjec = x.nodos.filter(n=>n.done&&(n.et==='Ejecución'||n.et==='Envío a ST')).map(n=>n.fecha).filter(Boolean).sort().pop()||'';
-  const fEnvUlt = ((ot.avances||[]).filter(a=>a.tipo==='OC enviada a proveedor').map(a=>a.fecha).filter(Boolean).sort().pop())||'';
-  const fOC = ot.ordenCompraFecha||'';
-  const ultCompra = [fOC,fEnvUlt].filter(Boolean).sort().pop()||'';
-  if(ultEjec && ultEjec>=ultCompra) return 'Ejecutada · por cerrar';
-  if(fEnvUlt && (!fOC || fEnvUlt>=fOC)) return 'OC enviada · esperando al proveedor';
-  if(ot.ordenCompraNum||fOC) return 'OC emitida · por enviar al proveedor';
-  if(ot.informeTecnicoFecha||ot.informeTecnicoNum) return 'Informe emitido · por emitir OC';
-  if(avanceFechaDe(ot,'Cotización recibida')) return 'Cotización recibida · por elaborar informe';
-  if(avanceFechaDe(ot,'Cotización solicitada')) return 'Cotización solicitada · esperando respuesta';
-  return 'En evaluación / cotización';
+  const hitos=x.nodos.filter(n=>n.done && ETAPAS_RANGO[n.et]).map(n=>({f:n.fecha||'', r:ETAPAS_RANGO[n.et]}));
+  if(!hitos.length) return 'En evaluación / cotización';
+  hitos.sort((a,b)=>a.f.localeCompare(b.f)||a.r-b.r);
+  return ETAPAS_TXT[hitos[hitos.length-1].r];
 }
-function tieneEjecucionDe(ot){
-  const folio=(ot.folioSigem||'').trim();
-  return (ot.avances||[]).some(a=>a.tipo==='Visita / Ejecución realizada') ||
-    (folio!=='' && state.correctivos.some(c=>c!==ot && (c.folioSigem||'').trim()===folio));
+function xDeOT(ot){
+  const exp=expedientesDe(state.correctivos).find(e=>e.evs.includes(ot));
+  return exp ? nodosExpediente(exp) : nodosExpediente({folio:(ot.folioSigem||'').trim()||('·sin-folio·'+ot.id), evs:[ot]});
 }
-function siguientePasoDe(ot, tieneEjec){
-  if(tieneEjec) return 'Cierre del expediente';
-  if(avanceFechaDe(ot,'OC enviada a proveedor')) return 'Visita / Ejecución realizada';
-  if(ot.ordenCompraNum||ot.ordenCompraFecha) return 'OC enviada a proveedor';
-  if(ot.informeTecnicoFecha||ot.informeTecnicoNum) return 'OC emitida';
-  if(avanceFechaDe(ot,'Cotización recibida')) return 'Informe técnico emitido';
-  if(avanceFechaDe(ot,'Cotización solicitada')) return 'Cotización recibida';
-  return 'Cotización solicitada';
+function siguientePasoDe(x){
+  const sig={
+    'En evaluación / cotización':'Cotización solicitada',
+    'Cotización solicitada · esperando respuesta':'Cotización recibida',
+    'Cotización recibida · por elaborar informe':'Informe técnico emitido',
+    'Informe emitido · por emitir OC':'OC emitida',
+    'OC emitida · por enviar al proveedor':'OC enviada a proveedor',
+    'OC enviada · esperando al proveedor':'Visita / Ejecución realizada',
+    'Ejecutada · por cerrar':'Cierre del expediente'
+  };
+  return sig[etapaActualDe(x)]||'Cotización solicitada';
+}
+function reaplicarAvances(ot){
+  /* recalcula los campos estructurados desde la bitácora: el último avance (por fecha) de cada tipo manda */
+  const avs=(ot.avances||[]).slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+  const ult=t=>{const l=avs.filter(a=>a.tipo===t); return l.length?l[l.length-1]:null;};
+  const inf=ult('Informe técnico emitido');
+  if(inf){ ot.informeTecnicoFecha=inf.fecha||''; if(inf.informeNum) ot.informeTecnicoNum=inf.informeNum; if(inf.responsable) ot.informeTecnicoResp=inf.responsable; if(inf.empresa) ot.empresa=inf.empresa; if(!ot.tipoCompra) ot.tipoCompra='Trato Directo'; }
+  const oc=ult('OC emitida');
+  if(oc){ ot.ordenCompraFecha=oc.fecha||''; if(oc.ocNum) ot.ordenCompraNum=oc.ocNum; if(oc.ocDesc) ot.ordenCompraDesc=oc.ocDesc; if(oc.tipoCompra) ot.tipoCompra=oc.tipoCompra; else if(!ot.tipoCompra) ot.tipoCompra='Trato Directo'; }
+  const ci=ult('Cierre del expediente');
+  if(ci){ ot.estadoEvento='Cerrado'; ot.fechaCierre=ci.fecha||''; if(ci.estadoEquipoCierre) ot.estadoEquipoCierre=ci.estadoEquipoCierre; }
+  ot.actualizado=hoyISO();
+}
+function limpiarTrasCambio(ot, tipoOriginal, fechaOriginal){
+  /* al quitar (o cambiar de tipo) un avance, revierte lo que ese tipo había escrito si no quedan otros */
+  const hay=t=>(ot.avances||[]).some(a=>a.tipo===t);
+  if(tipoOriginal==='Cierre del expediente' && !hay('Cierre del expediente')){ ot.estadoEvento='Abierto'; ot.fechaCierre=''; ot.estadoEquipoCierre=''; }
+  if(tipoOriginal==='Informe técnico emitido' && !hay('Informe técnico emitido') && ot.informeTecnicoFecha===fechaOriginal) ot.informeTecnicoFecha='';
+  if(tipoOriginal==='OC emitida' && !hay('OC emitida') && ot.ordenCompraFecha===fechaOriginal) ot.ordenCompraFecha='';
 }
 function estadoActualEquipo(key){
   /* último estado conocido del equipo: MP de la app, eventos correctivos, visitas y cierres */
@@ -1857,10 +1889,14 @@ function renderExpedientesHTML(otsEq){
     });
     const avs=(x.ot.avances||[]).slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
     const bitacora = avs.length ? `<div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">${avs.map(a=>{
-      const extra=[a.informeNum?'Informe N° '+a.informeNum:'', a.ocNum?'OC '+a.ocNum:'', a.estadoEquipoCierre?'Equipo '+a.estadoEquipoCierre+' al cierre':''].filter(Boolean).join(' · ');
-      return `<div class="log-item"><time>${fmtFecha(a.fecha)} · ${esc(a.tipo)}${a.registrado?' · registrado el '+esc(new Date(a.registrado).toLocaleString('es-CL')):''}</time>${esc([a.detalle,extra].filter(Boolean).join(' — '))||'&nbsp;'}</div>`;
+      const extra=[a.informeNum?'Informe N° '+a.informeNum:'', a.ocNum?'OC '+a.ocNum:'', a.estadoEquipoVisita?'Equipo '+a.estadoEquipoVisita+' tras la visita':'', a.estadoEquipoCierre?'Equipo '+a.estadoEquipoCierre+' al cierre':''].filter(Boolean).join(' · ');
+      return `<div class="log-item" style="display:flex;gap:8px;align-items:flex-start">
+        <div style="flex:1"><time>${fmtFecha(a.fecha)} · ${esc(a.tipo)}${a.registrado?' · registrado el '+esc(new Date(a.registrado).toLocaleString('es-CL')):''}${a.corregido?' · <span style="color:var(--ambar)">corregido el '+esc(new Date(a.corregido).toLocaleString('es-CL'))+'</span>':''}</time>${esc([a.detalle,extra].filter(Boolean).join(' — '))||'&nbsp;'}</div>
+        <button class="btn mini" data-editar-av="${esc(x.ot.id)}" data-av="${esc(a.id||'')}" title="Corregir este avance">✎</button>
+        <button class="btn mini peligro" data-borrar-av="${esc(x.ot.id)}" data-av="${esc(a.id||'')}" title="Eliminar este avance">🗑</button>
+      </div>`;
     }).join('')}</div>` : '';
-    const sig = x.cerrado ? '' : siguientePasoDe(x.ot, x.nodos.some(n=>n.done&&(n.et==='Ejecución'||n.et==='Envío a ST')));
+    const sig = x.cerrado ? '' : siguientePasoDe(x);
     const btnAvance = x.cerrado ? '' :
       `<button class="btn mini primario" data-avance-rapido="${esc(x.ot.id)}" title="Registra «${esc(sig)}» con la fecha de hoy, sin más campos">✓ ${esc(sig)} · hoy</button>
        <button class="btn mini" data-avance-ot="${esc(x.ot.id)}" title="Registrar un avance con fecha distinta o con detalle">➕ con detalle…</button>`;
@@ -1880,23 +1916,61 @@ function opcionesEmpresas(sel){
     ops.map(x=>`<option ${x===sel?'selected':''}>${esc(x)}</option>`).join('')+
     '<option value="__nueva__">➕ Agregar nueva empresa…</option>';
 }
+let avEditando=null;   /* {ot, av} cuando se está corrigiendo un avance de la bitácora */
 function abrirModalAvance(otId, tipoForzado){
   const ot=state.correctivos.find(c=>c.id===otId); if(!ot) return;
-  if(estadoEventoDe(ot)==='Cerrado'){ toast('El expediente está cerrado. Usa ✎ Editar solo para correcciones.'); return; }
+  if(estadoEventoDe(ot)==='Cerrado'){ toast('El expediente está cerrado. Corrige sus avances desde la bitácora (✎).'); return; }
+  avEditando=null;
   const e=equipoPorKey(ot.equipoKey);
   $('#av-contexto').textContent = `${e?e.equipo:''} · Folio ${ot.folioSigem||'—'}`;
-  $('#av-tipo').value = tipoForzado || siguientePasoDe(ot, tieneEjecucionDe(ot));
+  $('#av-tipo').value = tipoForzado || siguientePasoDe(xDeOT(ot));
   $('#av-fecha').value=hoyISO();
   $('#av-detalle').value='';
   $('#modal-avance').dataset.ot=otId;
   renderAvExtra();
   $('#modal-avance').classList.add('abierto');
 }
+function abrirEdicionAvance(otId, avId){
+  /* corregir un avance existente (también en expedientes cerrados) */
+  const ot=state.correctivos.find(c=>c.id===otId); if(!ot) return;
+  const av=(ot.avances||[]).find(a=>a.id===avId); if(!av){ toast('No se encontró el avance.'); return; }
+  avEditando={ot, av};
+  const e=equipoPorKey(ot.equipoKey);
+  $('#av-contexto').textContent = `${e?e.equipo:''} · Folio ${ot.folioSigem||'—'} · ✎ corrigiendo avance`;
+  $('#av-tipo').value=av.tipo;
+  $('#av-fecha').value=av.fecha||hoyISO();
+  $('#av-detalle').value=av.detalle||'';
+  $('#modal-avance').dataset.ot=otId;
+  renderAvExtra();
+  if(av.tipo==='Informe técnico emitido'){
+    $('#av-inf-num').value=av.informeNum||'';
+    $('#av-inf-resp').value=av.responsable||'';
+    if(av.empresa) $('#av-inf-empresa').innerHTML=opcionesEmpresas(av.empresa);
+  } else if(av.tipo==='OC emitida'){
+    $('#av-oc-num').value=av.ocNum||'';
+    $('#av-oc-desc').value=av.ocDesc||'';
+    const tc=$('#av-oc-tc'); if(tc&&av.tipoCompra) tc.value=av.tipoCompra;
+  } else if(av.tipo==='Visita / Ejecución realizada'){
+    $('#av-visita-estado').value=av.estadoEquipoVisita||'Operativo';
+  } else if(av.tipo==='Cierre del expediente'){
+    $('#av-cierre-estado').value=av.estadoEquipoCierre||'Operativo';
+  }
+  $('#modal-avance').classList.add('abierto');
+}
+function borrarAvance(otId, avId){
+  const ot=state.correctivos.find(c=>c.id===otId); if(!ot) return;
+  const av=(ot.avances||[]).find(a=>a.id===avId); if(!av) return;
+  if(!confirm('¿Eliminar este avance de la bitácora?\n\n'+fmtFecha(av.fecha)+' · '+av.tipo)) return;
+  ot.avances=ot.avances.filter(a=>a!==av);
+  limpiarTrasCambio(ot, av.tipo, av.fecha);
+  reaplicarAvances(ot);
+  guardar(); renderTodo(); toast('🗑 Avance eliminado y expediente recalculado.');
+}
 function registrarAvanceRapido(otId){
   /* un clic = el siguiente paso del flujo con la fecha de hoy; el detalle es opcional y posterior */
   const ot=state.correctivos.find(c=>c.id===otId); if(!ot) return;
   if(estadoEventoDe(ot)==='Cerrado') return;
-  const sig=siguientePasoDe(ot, tieneEjecucionDe(ot));
+  const sig=siguientePasoDe(xDeOT(ot));
   if(sig==='Visita / Ejecución realizada' || sig==='Cierre del expediente'){
     abrirModalAvance(otId, sig);   /* estos dos preguntan lo único que importa: cómo quedó el equipo */
     return;
@@ -1931,11 +2005,7 @@ function renderAvExtra(){
     x.innerHTML=`<div class="sub-form"><div class="f-grupo"><label class="et">Estado del equipo al cierre</label><select id="av-cierre-estado"><option>Operativo</option><option>No Operativo</option><option>Servicio Técnico</option></select></div></div>`;
   } else x.innerHTML='';
 }
-function guardarAvance(){
-  const ot=state.correctivos.find(c=>c.id===$('#modal-avance').dataset.ot); if(!ot) return;
-  const tipo=$('#av-tipo').value, fecha=$('#av-fecha').value;
-  if(!tipo||!fecha){ toast('⚠️ Indica el tipo de avance y la fecha del hecho.'); return; }
-  const av={id:uid(), tipo, fecha, detalle:$('#av-detalle').value.trim(), registrado:new Date().toISOString()};
+function capturarExtrasAvance(av, tipo){
   /* el estado vale más que el detalle: solo tipo y fecha son obligatorios */
   if(tipo==='Informe técnico emitido'){
     av.informeNum=$('#av-inf-num').value.trim();
@@ -1950,12 +2020,35 @@ function guardarAvance(){
   } else if(tipo==='Cierre del expediente'){
     av.estadoEquipoCierre=$('#av-cierre-estado').value;
   }
-  aplicarAvance(ot, av);
+}
+function guardarAvance(){
+  const ot=state.correctivos.find(c=>c.id===$('#modal-avance').dataset.ot); if(!ot) return;
+  const tipo=$('#av-tipo').value, fecha=$('#av-fecha').value;
+  if(!tipo||!fecha){ toast('⚠️ Indica el tipo de avance y la fecha del hecho.'); return; }
+  let txtOk;
+  if(avEditando && avEditando.ot===ot){
+    /* corrección: actualiza el avance en su lugar, conserva la fecha de registro y recalcula el expediente */
+    const av=avEditando.av;
+    const tipoOriginal=av.tipo, fechaOriginal=av.fecha;
+    ['informeNum','responsable','empresa','ocNum','ocDesc','tipoCompra','estadoEquipoVisita','estadoEquipoCierre'].forEach(k=>delete av[k]);
+    av.tipo=tipo; av.fecha=fecha; av.detalle=$('#av-detalle').value.trim();
+    capturarExtrasAvance(av, tipo);
+    av.corregido=new Date().toISOString();
+    limpiarTrasCambio(ot, tipoOriginal, fechaOriginal);
+    reaplicarAvances(ot);
+    avEditando=null;
+    txtOk='✅ Avance corregido y expediente recalculado.';
+  } else {
+    const av={id:uid(), tipo, fecha, detalle:$('#av-detalle').value.trim(), registrado:new Date().toISOString()};
+    capturarExtrasAvance(av, tipo);
+    aplicarAvance(ot, av);
+    txtOk='✅ Avance registrado: '+tipo+'.';
+  }
   const folio=(ot.folioSigem||'').trim();
   const ejec=state.correctivos.filter(c=>c!==ot && (c.folioSigem||'').trim()===folio && c.fechaDocumento).map(c=>c.fechaDocumento);
   const avisos=avisosOrden(hitosExpediente(ot, ejec));
   guardar(); cerrarModal('modal-avance'); renderTodo();
-  toast(avisos.length ? '⚠️ Avance registrado, pero revisa el orden: '+avisos[0] : '✅ Avance registrado: '+tipo+'.');
+  toast(avisos.length ? '⚠️ Guardado, pero revisa el orden: '+avisos[0] : txtOk);
 }
 function abrirModalOT(equipoKey, ot){
   const e=equipoPorKey(equipoKey); if(!e) return;
@@ -2173,6 +2266,10 @@ function conectarEventos(){
   $('#vista-detalle').addEventListener('click',ev=>{
     const avr=ev.target.closest('[data-avance-rapido]');
     if(avr){ registrarAvanceRapido(avr.dataset.avanceRapido); return; }
+    const ave=ev.target.closest('[data-editar-av]');
+    if(ave){ abrirEdicionAvance(ave.dataset.editarAv, ave.dataset.av); return; }
+    const avx=ev.target.closest('[data-borrar-av]');
+    if(avx){ borrarAvance(avx.dataset.borrarAv, avx.dataset.av); return; }
     const avb=ev.target.closest('[data-avance-ot]');
     if(avb){ abrirModalAvance(avb.dataset.avanceOt); return; }
     const ed=ev.target.closest('[data-editar-mp]');
