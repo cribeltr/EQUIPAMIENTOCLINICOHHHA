@@ -217,6 +217,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
     <button data-vista="carga">📂 Carga de Datos</button>
     <button data-vista="equipos">🛠 Equipos <span class="nbadge" id="badge-equipos" style="display:none"></span></button>
     <button data-vista="pendientes">📋 Pendientes <span class="nbadge" id="badge-pend" style="display:none"></span></button>
+    <button data-vista="operatividad">🩺 Operatividad <span class="nbadge" id="badge-oper" style="display:none"></span></button>
     <button data-vista="codigos">📖 Códigos y Reglas</button>
   </nav>
 </header>
@@ -352,6 +353,15 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
       <button class="btn mini" data-fp="todos">Todos</button>
     </div>
     <div id="lista-pendientes"></div>
+  </div>
+</section>
+
+<!-- ============ VISTA: OPERATIVIDAD ============ -->
+<section class="vista" id="vista-operatividad">
+  <div class="card">
+    <h2>🩺 Operatividad de equipos</h2>
+    <p class="sub">El último estado conocido de cada equipo que requiere atención: no operativos, en servicio técnico, con expediente correctivo abierto, o marcados FS/NU en la planilla sin resolución posterior. Presiona una fila para abrir la ficha.</p>
+    <div id="lista-operatividad"></div>
   </div>
 </section>
 
@@ -677,6 +687,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
             <option>Informe técnico emitido</option>
             <option>OC emitida</option>
             <option>OC enviada a proveedor</option>
+            <option>Visita / Ejecución realizada</option>
             <option>Cierre del expediente</option>
             <option>Otro avance</option>
           </select>
@@ -1037,10 +1048,11 @@ function mostrarVista(id){
   cerrarPopover();
   if(id==='equipos') renderTabla();
   if(id==='pendientes') renderPendientes();
+  if(id==='operatividad') renderOperatividad();
   window.scrollTo({top:0});
 }
 function renderTodo(){
-  renderResumen(); renderTabla(); renderPendientes(); renderBadges();
+  renderResumen(); renderTabla(); renderPendientes(); renderOperatividad(); renderBadges();
   if(detalleKey) renderDetalle(detalleKey);
 }
 function renderBadges(){
@@ -1051,6 +1063,48 @@ function renderBadges(){
   const bP=$('#badge-pend');
   bP.style.display = abiertos?'':'none';
   bP.textContent = abiertos;
+  const nOper = tableroOperatividad().length;
+  const bO=$('#badge-oper');
+  bO.style.display = nOper?'':'none';
+  bO.textContent = nOper;
+}
+
+/* ---------- Tablero de Operatividad ---------- */
+function renderOperatividad(){
+  const lista = tableroOperatividad();
+  if(!lista.length){
+    $('#lista-operatividad').innerHTML = '<div class="vacio">✅ Sin equipos en atención: todos con último estado Operativo, sin expedientes correctivos abiertos ni FS/NU pendientes en la planilla.</div>';
+    return;
+  }
+  const nNoOp=lista.filter(i=>i.estado==='No Operativo').length;
+  const nST=lista.filter(i=>i.estado==='Servicio Técnico').length;
+  const nGes=lista.filter(i=>i.expAbiertos).length;
+  const nPla=lista.filter(i=>i.planilla && !i.expAbiertos && !i.estado).length;
+  const resumen = `<div class="fila-flex" style="margin-bottom:12px">
+    ${nNoOp?`<span class="chip rojo">🔴 ${nNoOp} no operativo${nNoOp>1?'s':''}</span>`:''}
+    ${nST?`<span class="chip ambar">🔧 ${nST} en servicio técnico</span>`:''}
+    ${nGes?`<span class="chip azul">📂 ${nGes} con expediente abierto</span>`:''}
+    ${nPla?`<span class="chip morado">📋 ${nPla} FS/NU según planilla</span>`:''}
+  </div>`;
+  const filas = lista.map(it=>{
+    const e=it.equipo;
+    const estChip = it.estado==='No Operativo' ? '<span class="chip rojo">✖ No Operativo</span>'
+      : it.estado==='Servicio Técnico' ? '<span class="chip ambar">🔧 Servicio Técnico</span>'
+      : it.expAbiertos ? '<span class="chip verde">Operativo</span>' : '<span class="chip gris">Sin estado en app</span>';
+    const gestion = it.etapa
+      ? `<strong>${esc(it.etapa)}</strong><br><small style="color:var(--gris-4)">${esc(it.gestionTxt||'')} · ${fmtFecha(it.gestionFecha)}</small>`
+      : it.planilla ? `<span class="chip ${it.planilla.cod==='FS'?'rojo':'morado'}">${it.planilla.cod} en ${MESES[it.planilla.mes]} (planilla)</span><br><small style="color:var(--gris-4)">sin resolución posterior ni expediente</small>`
+      : '—';
+    const dias = it.dias ? `<strong style="${it.estado==='No Operativo'?'color:var(--rojo)':''}">${it.dias} días</strong>` : '—';
+    return `<tr class="click" data-oper-eq="${esc(it.equipoKey)}">
+      <td><strong>${esc(e?e.equipo:it.equipoKey)}</strong><br><small style="color:var(--gris-4)">${esc(e?('Serie '+(e.serie||'—')+' · '+(e.servicio||'')):'')}</small></td>
+      <td>${estChip}</td>
+      <td style="max-width:340px">${gestion}</td>
+      <td>${dias}</td>
+    </tr>`;
+  }).join('');
+  $('#lista-operatividad').innerHTML = resumen + `<div style="overflow:auto"><table class="lista">
+    <tr><th>Equipo</th><th>Último estado</th><th>Última gestión / situación</th><th>Días</th></tr>${filas}</table></div>`;
 }
 
 /* ---------- Resumen de carga ---------- */
@@ -1362,13 +1416,8 @@ function renderDetalle(key){
   $('#det-titulo').textContent = e.equipo || '(Equipo sin nombre)';
   const manualesEq = state.manuales.filter(m=>m.equipoKey===key).sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
   const otsEq = state.correctivos.filter(c=>c.equipoKey===key).sort((a,b)=>(b.fechaDocumento||'').localeCompare(a.fechaDocumento||''));
-  /* Estado del equipo: el registro más reciente entre MP (Paso 8) y OT correctiva (Paso 10) */
-  const candEstado = [
-    ...manualesEq.map(m=>({f:m.fecha||'', est:m.estadoEquipo})),
-    ...otsEq.map(c=>({f:c.fechaDocumento||'', est:c.estadoEquipo})),
-    ...otsEq.filter(c=>c.fechaCierre && c.estadoEquipoCierre).map(c=>({f:c.fechaCierre, est:c.estadoEquipoCierre}))
-  ].filter(x=>x.est).sort((a,b)=>b.f.localeCompare(a.f));
-  const estadoActual = candEstado.length?estadoCorrectivoDe(candEstado[0].est):null;
+  /* Estado del equipo: el registro más reciente entre MP, eventos correctivos, visitas y cierres */
+  const estadoActual = estadoActualEquipo(key);
   const chips=[];
   if(e.servicio) chips.push(`<span class="chip azul">${esc(e.servicio)}</span>`);
   if(e.clasificacion) chips.push(`<span class="chip morado">${esc(e.clasificacion)}</span>`);
@@ -1651,6 +1700,7 @@ function hitosExpediente(ot, fechasEjecucion){
   if(ot.ordenCompraFecha) h.push(['OC emitida', ot.ordenCompraFecha]);
   if(fEnv) h.push(['OC enviada', fEnv]);
   (fechasEjecucion||[]).forEach(f=>h.push(['Ejecución', f]));
+  (ot.avances||[]).filter(a=>a.tipo==='Visita / Ejecución realizada' && a.fecha).forEach(a=>h.push(['Ejecución', a.fecha]));
   if(ot.fechaCierre) h.push(['Cierre', ot.fechaCierre]);
   return h.filter(x=>x[1]);
 }
@@ -1686,8 +1736,11 @@ function nodosExpediente(exp){
   if(hayOC) n.push({et:'OC emitida', sub:ot.ordenCompraNum||'', fecha:ot.ordenCompraFecha||'', done:true});
   else if(!cerrado) n.push({et:'Orden de compra', sub:'', fecha:'', done:false});
   if(fEnv) n.push({et:'OC enviada', sub:'', fecha:fEnv, done:true});
-  if(otros.length) otros.forEach(r=>n.push({et:tipoEventoDe(r)==='Envío a Servicio Técnico'?'Envío a ST':'Ejecución', sub:tipoEventoDe(r), fecha:r.fechaDocumento||'', done:true}));
-  else if(!cerrado) n.push({et:'Ejecución', sub:'', fecha:'', done:false});
+  const visitas=(ot.avances||[]).filter(a=>a.tipo==='Visita / Ejecución realizada').sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+  if(otros.length||visitas.length){
+    otros.forEach(r=>n.push({et:tipoEventoDe(r)==='Envío a Servicio Técnico'?'Envío a ST':'Ejecución', sub:tipoEventoDe(r), fecha:r.fechaDocumento||'', done:true}));
+    visitas.forEach(v=>n.push({et:'Ejecución', sub:'Visita', fecha:v.fecha||'', done:true}));
+  } else if(!cerrado) n.push({et:'Ejecución', sub:'', fecha:'', done:false});
   n.push(cerrado ? {et:'Cierre', sub:'', fecha:ot.fechaCierre||'', done:true} : {et:'Cierre', sub:'', fecha:'', done:false});
   const critico = equipoDetenidoEn(ot);
   const dias = ot.fechaDocumento ? diasEntre(ot.fechaDocumento, cerrado ? (ot.fechaCierre||ot.fechaDocumento) : hoyISO()) : 0;
@@ -1695,13 +1748,85 @@ function nodosExpediente(exp){
 }
 function etapaActualDe(x){
   if(x.cerrado) return 'Cerrada';
-  if(x.nodos.some(n=>n.done && (n.et==='Ejecución'||n.et==='Envío a ST'))) return 'Ejecutada · por cerrar';
-  if(avanceFechaDe(x.ot,'OC enviada a proveedor')) return 'OC enviada · esperando al proveedor';
-  if(x.ot.ordenCompraNum||x.ot.ordenCompraFecha) return 'OC emitida · por enviar al proveedor';
-  if(x.ot.informeTecnicoFecha||x.ot.informeTecnicoNum) return 'Informe emitido · por emitir OC';
-  if(avanceFechaDe(x.ot,'Cotización recibida')) return 'Cotización recibida · por elaborar informe';
-  if(avanceFechaDe(x.ot,'Cotización solicitada')) return 'Cotización solicitada · esperando respuesta';
+  const ot=x.ot;
+  /* una compra posterior a la última ejecución (repuesto adicional) devuelve la etapa a la compra */
+  const ultEjec = x.nodos.filter(n=>n.done&&(n.et==='Ejecución'||n.et==='Envío a ST')).map(n=>n.fecha).filter(Boolean).sort().pop()||'';
+  const fEnvUlt = ((ot.avances||[]).filter(a=>a.tipo==='OC enviada a proveedor').map(a=>a.fecha).filter(Boolean).sort().pop())||'';
+  const fOC = ot.ordenCompraFecha||'';
+  const ultCompra = [fOC,fEnvUlt].filter(Boolean).sort().pop()||'';
+  if(ultEjec && ultEjec>=ultCompra) return 'Ejecutada · por cerrar';
+  if(fEnvUlt && (!fOC || fEnvUlt>=fOC)) return 'OC enviada · esperando al proveedor';
+  if(ot.ordenCompraNum||fOC) return 'OC emitida · por enviar al proveedor';
+  if(ot.informeTecnicoFecha||ot.informeTecnicoNum) return 'Informe emitido · por emitir OC';
+  if(avanceFechaDe(ot,'Cotización recibida')) return 'Cotización recibida · por elaborar informe';
+  if(avanceFechaDe(ot,'Cotización solicitada')) return 'Cotización solicitada · esperando respuesta';
   return 'En evaluación / cotización';
+}
+function tieneEjecucionDe(ot){
+  const folio=(ot.folioSigem||'').trim();
+  return (ot.avances||[]).some(a=>a.tipo==='Visita / Ejecución realizada') ||
+    (folio!=='' && state.correctivos.some(c=>c!==ot && (c.folioSigem||'').trim()===folio));
+}
+function siguientePasoDe(ot, tieneEjec){
+  if(tieneEjec) return 'Cierre del expediente';
+  if(avanceFechaDe(ot,'OC enviada a proveedor')) return 'Visita / Ejecución realizada';
+  if(ot.ordenCompraNum||ot.ordenCompraFecha) return 'OC enviada a proveedor';
+  if(ot.informeTecnicoFecha||ot.informeTecnicoNum) return 'OC emitida';
+  if(avanceFechaDe(ot,'Cotización recibida')) return 'Informe técnico emitido';
+  if(avanceFechaDe(ot,'Cotización solicitada')) return 'Cotización recibida';
+  return 'Cotización solicitada';
+}
+function estadoActualEquipo(key){
+  /* último estado conocido del equipo: MP de la app, eventos correctivos, visitas y cierres */
+  const cand=[
+    ...state.manuales.filter(m=>m.equipoKey===key && m.estadoEquipo).map(m=>({f:m.fecha||'', est:m.estadoEquipo})),
+    ...state.correctivos.filter(c=>c.equipoKey===key && c.estadoEquipo).map(c=>({f:c.fechaDocumento||'', est:estadoCorrectivoDe(c.estadoEquipo)})),
+    ...state.correctivos.filter(c=>c.equipoKey===key && c.fechaCierre && c.estadoEquipoCierre).map(c=>({f:c.fechaCierre, est:c.estadoEquipoCierre})),
+    ...state.correctivos.filter(c=>c.equipoKey===key).flatMap(c=>(c.avances||[]).filter(a=>a.estadoEquipoVisita).map(a=>({f:a.fecha||'', est:a.estadoEquipoVisita})))
+  ].sort((a,b)=>b.f.localeCompare(a.f));
+  return cand.length?cand[0].est:null;
+}
+function tableroOperatividad(){
+  const items=new Map();
+  const get=k=>{ if(!items.has(k)) items.set(k,{equipoKey:k}); return items.get(k); };
+  /* 1) expedientes correctivos abiertos */
+  expedientesDe(state.correctivos).forEach(exp=>{
+    const x=nodosExpediente(exp);
+    if(x.cerrado) return;
+    const it=get(x.ot.equipoKey);
+    const avs=(x.ot.avances||[]).slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+    const ult=avs[avs.length-1];
+    it.gestionTxt = ult?ult.tipo:('OT abierta · folio '+(x.ot.folioSigem||'—'));
+    it.gestionFecha = ult?ult.fecha:x.ot.fechaDocumento;
+    it.etapa = etapaActualDe(x);
+    it.dias = Math.max(it.dias||0, x.dias||0);
+    it.expAbiertos=(it.expAbiertos||0)+1;
+  });
+  /* 2) estado físico actual de todos los equipos */
+  state.equipos.forEach(e=>{
+    const est=estadoActualEquipo(e.key);
+    if(est && est!=='Operativo') get(e.key).estado=est;
+    else if(items.has(e.key)) items.get(e.key).estado=est||'';
+  });
+  /* 3) FS / NU según planilla, sin Si posterior y sin Baja */
+  const porEq={};
+  state.registros.forEach(r=>{ (porEq[r.equipoKey]=porEq[r.equipoKey]||[]).push(r); });
+  Object.entries(porEq).forEach(([k,rs])=>{
+    if(rs.some(r=>r.resultado==='Baja')) return;
+    const malos=rs.filter(r=>r.resultado==='FS'||r.resultado==='NU');
+    if(!malos.length) return;
+    const peor=malos.sort((a,b)=>b.mes-a.mes)[0];
+    if(!rs.some(r=>(r.resultado==='Si'||r.resultado==='Si-RA') && r.mes>peor.mes)){
+      const it=get(k); it.planilla={cod:peor.resultado, mes:peor.mes};
+    }
+  });
+  const lista=[...items.values()];
+  lista.forEach(it=>{
+    it.equipo = state.equipos.find(e=>e.key===it.equipoKey)||null;
+    it.peso = it.estado==='No Operativo'?0 : it.estado==='Servicio Técnico'?1 : it.expAbiertos?2 : 3;
+  });
+  lista.sort((a,b)=>a.peso-b.peso || (b.dias||0)-(a.dias||0));
+  return lista;
 }
 /* --- fin núcleo de expedientes --- */
 
@@ -1735,7 +1860,10 @@ function renderExpedientesHTML(otsEq){
       const extra=[a.informeNum?'Informe N° '+a.informeNum:'', a.ocNum?'OC '+a.ocNum:'', a.estadoEquipoCierre?'Equipo '+a.estadoEquipoCierre+' al cierre':''].filter(Boolean).join(' · ');
       return `<div class="log-item"><time>${fmtFecha(a.fecha)} · ${esc(a.tipo)}${a.registrado?' · registrado el '+esc(new Date(a.registrado).toLocaleString('es-CL')):''}</time>${esc([a.detalle,extra].filter(Boolean).join(' — '))||'&nbsp;'}</div>`;
     }).join('')}</div>` : '';
-    const btnAvance = x.cerrado ? '' : `<button class="btn mini" data-avance-ot="${esc(x.ot.id)}">➕ Registrar avance</button>`;
+    const sig = x.cerrado ? '' : siguientePasoDe(x.ot, x.nodos.some(n=>n.done&&(n.et==='Ejecución'||n.et==='Envío a ST')));
+    const btnAvance = x.cerrado ? '' :
+      `<button class="btn mini primario" data-avance-rapido="${esc(x.ot.id)}" title="Registra «${esc(sig)}» con la fecha de hoy, sin más campos">✓ ${esc(sig)} · hoy</button>
+       <button class="btn mini" data-avance-ot="${esc(x.ot.id)}" title="Registrar un avance con fecha distinta o con detalle">➕ con detalle…</button>`;
     return `<div class="expediente ${abiertoCritico?'critico':''}">
       <div class="exp-cab"><strong>Folio ${esc(x.folio.startsWith('·sin-folio·')?'(sin folio)':x.folio)}</strong>${estadoChip}${etapa}${btnAvance}${dias}</div>
       <div class="linea-tiempo">${html}</div>${bitacora}
@@ -1752,44 +1880,53 @@ function opcionesEmpresas(sel){
     ops.map(x=>`<option ${x===sel?'selected':''}>${esc(x)}</option>`).join('')+
     '<option value="__nueva__">➕ Agregar nueva empresa…</option>';
 }
-function abrirModalAvance(otId){
+function abrirModalAvance(otId, tipoForzado){
   const ot=state.correctivos.find(c=>c.id===otId); if(!ot) return;
   if(estadoEventoDe(ot)==='Cerrado'){ toast('El expediente está cerrado. Usa ✎ Editar solo para correcciones.'); return; }
   const e=equipoPorKey(ot.equipoKey);
   $('#av-contexto').textContent = `${e?e.equipo:''} · Folio ${ot.folioSigem||'—'}`;
-  /* sugerir el siguiente paso del flujo */
-  let tipo='Cotización solicitada';
-  if(avanceFechaDe(ot,'Cotización solicitada')) tipo='Cotización recibida';
-  if(avanceFechaDe(ot,'Cotización recibida')) tipo='Informe técnico emitido';
-  if(ot.informeTecnicoFecha||ot.informeTecnicoNum) tipo='OC emitida';
-  if(ot.ordenCompraNum||ot.ordenCompraFecha) tipo='OC enviada a proveedor';
-  if(avanceFechaDe(ot,'OC enviada a proveedor')) tipo='Cierre del expediente';
-  $('#av-tipo').value=tipo;
+  $('#av-tipo').value = tipoForzado || siguientePasoDe(ot, tieneEjecucionDe(ot));
   $('#av-fecha').value=hoyISO();
   $('#av-detalle').value='';
   $('#modal-avance').dataset.ot=otId;
   renderAvExtra();
   $('#modal-avance').classList.add('abierto');
 }
+function registrarAvanceRapido(otId){
+  /* un clic = el siguiente paso del flujo con la fecha de hoy; el detalle es opcional y posterior */
+  const ot=state.correctivos.find(c=>c.id===otId); if(!ot) return;
+  if(estadoEventoDe(ot)==='Cerrado') return;
+  const sig=siguientePasoDe(ot, tieneEjecucionDe(ot));
+  if(sig==='Visita / Ejecución realizada' || sig==='Cierre del expediente'){
+    abrirModalAvance(otId, sig);   /* estos dos preguntan lo único que importa: cómo quedó el equipo */
+    return;
+  }
+  aplicarAvance(ot, {id:uid(), tipo:sig, fecha:hoyISO(), detalle:'', registrado:new Date().toISOString()});
+  guardar(); renderTodo();
+  toast('✅ '+sig+' — registrado hoy. El detalle se puede completar después con «➕ con detalle…».');
+}
 function renderAvExtra(){
   const ot=state.correctivos.find(c=>c.id===$('#modal-avance').dataset.ot);
   const t=$('#av-tipo').value, x=$('#av-extra');
+  const op = '<span style="color:var(--gris-4);font-weight:400">(opcional, se puede completar después)</span>';
   if(t==='Informe técnico emitido'){
     x.innerHTML=`<div class="sub-form">
       <div class="f-2col">
-        <div class="f-grupo"><label class="et">N° de informe técnico <span class="req">*</span></label><input type="text" id="av-inf-num" value="${esc(ot&&ot.informeTecnicoNum||'')}"></div>
-        <div class="f-grupo"><label class="et">Responsable del informe <span class="req">*</span></label><select id="av-inf-resp"><option value="">— Seleccionar —</option>${EJECUTORES.map(nm=>`<option ${ot&&ot.informeTecnicoResp===nm?'selected':''}>${esc(nm)}</option>`).join('')}</select></div>
+        <div class="f-grupo"><label class="et">N° de informe técnico ${op}</label><input type="text" id="av-inf-num" value="${esc(ot&&ot.informeTecnicoNum||'')}"></div>
+        <div class="f-grupo"><label class="et">Responsable del informe ${op}</label><select id="av-inf-resp"><option value="">— Seleccionar —</option>${EJECUTORES.map(nm=>`<option ${ot&&ot.informeTecnicoResp===nm?'selected':''}>${esc(nm)}</option>`).join('')}</select></div>
       </div>
-      <div class="f-grupo"><label class="et">Empresa</label><select id="av-inf-empresa">${opcionesEmpresas(ot&&ot.empresa||'')}</select></div>
+      <div class="f-grupo"><label class="et">Empresa ${op}</label><select id="av-inf-empresa">${opcionesEmpresas(ot&&ot.empresa||'')}</select></div>
     </div>`;
   } else if(t==='OC emitida'){
     x.innerHTML=`<div class="sub-form">
       <div class="f-2col">
-        <div class="f-grupo"><label class="et">N° de orden de compra <span class="req">*</span></label><input type="text" id="av-oc-num" value="${esc(ot&&ot.ordenCompraNum||'')}"></div>
-        ${ot&&ot.tipoCompra?'':'<div class="f-grupo"><label class="et">Tipo de compra <span class="req">*</span></label><select id="av-oc-tc"><option value="">— Seleccionar —</option><option>Trato Directo</option><option>Compra Ágil</option></select></div>'}
+        <div class="f-grupo"><label class="et">N° de orden de compra ${op}</label><input type="text" id="av-oc-num" value="${esc(ot&&ot.ordenCompraNum||'')}"></div>
+        ${ot&&ot.tipoCompra?'':'<div class="f-grupo"><label class="et">Tipo de compra</label><select id="av-oc-tc"><option value="">Trato Directo (por defecto)</option><option>Trato Directo</option><option>Compra Ágil</option></select></div>'}
       </div>
-      <div class="f-grupo"><label class="et">Descripción de la OC</label><textarea id="av-oc-desc">${esc(ot&&ot.ordenCompraDesc||'')}</textarea></div>
+      <div class="f-grupo"><label class="et">Descripción de la OC ${op}</label><textarea id="av-oc-desc">${esc(ot&&ot.ordenCompraDesc||'')}</textarea></div>
     </div>`;
+  } else if(t==='Visita / Ejecución realizada'){
+    x.innerHTML=`<div class="sub-form"><div class="f-grupo"><label class="et">¿Cómo quedó el equipo tras la visita?</label><select id="av-visita-estado"><option>Operativo</option><option>No Operativo</option><option>Servicio Técnico</option></select></div></div>`;
   } else if(t==='Cierre del expediente'){
     x.innerHTML=`<div class="sub-form"><div class="f-grupo"><label class="et">Estado del equipo al cierre</label><select id="av-cierre-estado"><option>Operativo</option><option>No Operativo</option><option>Servicio Técnico</option></select></div></div>`;
   } else x.innerHTML='';
@@ -1799,16 +1936,17 @@ function guardarAvance(){
   const tipo=$('#av-tipo').value, fecha=$('#av-fecha').value;
   if(!tipo||!fecha){ toast('⚠️ Indica el tipo de avance y la fecha del hecho.'); return; }
   const av={id:uid(), tipo, fecha, detalle:$('#av-detalle').value.trim(), registrado:new Date().toISOString()};
+  /* el estado vale más que el detalle: solo tipo y fecha son obligatorios */
   if(tipo==='Informe técnico emitido'){
     av.informeNum=$('#av-inf-num').value.trim();
     av.responsable=$('#av-inf-resp').value;
     const emp=$('#av-inf-empresa').value; av.empresa = emp==='__nueva__'?'':emp;
-    if(!av.informeNum||!av.responsable){ toast('⚠️ Indica el N° del informe técnico y su responsable.'); return; }
   } else if(tipo==='OC emitida'){
     av.ocNum=$('#av-oc-num').value.trim();
     av.ocDesc=$('#av-oc-desc').value.trim();
-    const tc=$('#av-oc-tc'); if(tc){ av.tipoCompra=tc.value; if(!av.tipoCompra){ toast('⚠️ Indica el tipo de compra de la OC.'); return; } }
-    if(!av.ocNum){ toast('⚠️ Indica el N° de la orden de compra.'); return; }
+    const tc=$('#av-oc-tc'); if(tc && tc.value) av.tipoCompra=tc.value;
+  } else if(tipo==='Visita / Ejecución realizada'){
+    av.estadoEquipoVisita=$('#av-visita-estado').value;
   } else if(tipo==='Cierre del expediente'){
     av.estadoEquipoCierre=$('#av-cierre-estado').value;
   }
@@ -2033,6 +2171,8 @@ function conectarEventos(){
   $('#btn-abrir-pendiente').addEventListener('click',()=>abrirModalPendiente(detalleKey,null,null));
   $('#btn-abrir-ot').addEventListener('click',()=>abrirModalOT(detalleKey,null));
   $('#vista-detalle').addEventListener('click',ev=>{
+    const avr=ev.target.closest('[data-avance-rapido]');
+    if(avr){ registrarAvanceRapido(avr.dataset.avanceRapido); return; }
     const avb=ev.target.closest('[data-avance-ot]');
     if(avb){ abrirModalAvance(avb.dataset.avanceOt); return; }
     const ed=ev.target.closest('[data-editar-mp]');
@@ -2114,6 +2254,12 @@ function conectarEventos(){
   $$('#pe-estado button').forEach(b=>b.addEventListener('click',()=>setToggle('pe-estado',b.dataset.v,{'Abierto':'sel-azul','Completado':'sel-verde'})));
   $('#pe-guardar').addEventListener('click',guardarPendiente);
   $('#pe-eliminar').addEventListener('click',eliminarPendiente);
+
+  /* Operatividad */
+  $('#lista-operatividad').addEventListener('click',ev=>{
+    const tr=ev.target.closest('tr[data-oper-eq]');
+    if(tr) abrirDetalle(tr.dataset.operEq);
+  });
 
   /* Pendientes globales */
   $('#filtros-pend').addEventListener('click',ev=>{
