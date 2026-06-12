@@ -1,0 +1,1406 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sistema de Gestión MP 2026 · Equipamiento Clínico HHHA</title>
+<script src="js/xlsx.full.min.js"></script>
+<style>
+:root{
+  --azul:#0b5ea8; --azul-osc:#084a85; --azul-claro:#e8f1fa;
+  --gris-1:#f5f7fa; --gris-2:#e4e9ef; --gris-3:#c4ccd6; --gris-4:#6b7785; --tinta:#1d2733;
+  --verde:#1e8e3e; --verde-bg:#e6f4ea; --ambar:#b06000; --ambar-bg:#fdf3e1;
+  --rojo:#c5221f; --rojo-bg:#fce8e6; --morado:#7627bb; --morado-bg:#f3e8fd;
+  --teal:#0a7d72; --teal-bg:#e0f2f1; --cian:#00729b; --cian-bg:#e1f0f6;
+  --sombra:0 1px 3px rgba(16,32,51,.12),0 4px 14px rgba(16,32,51,.08);
+  --radio:10px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{font-size:15px}
+body{font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;background:var(--gris-1);color:var(--tinta);min-height:100vh}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:.95rem}
+
+/* ---------- Encabezado ---------- */
+header{background:linear-gradient(135deg,var(--azul-osc),var(--azul));color:#fff;padding:14px 22px 0;box-shadow:var(--sombra);position:sticky;top:0;z-index:60}
+.brand{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.brand .logo{width:42px;height:42px;border-radius:9px;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-size:1.4rem}
+.brand h1{font-size:1.15rem;font-weight:600;letter-spacing:.2px}
+.brand small{display:block;font-size:.78rem;opacity:.85;font-weight:400}
+nav{display:flex;gap:4px;margin-top:12px;flex-wrap:wrap}
+nav button{background:transparent;border:none;color:rgba(255,255,255,.82);padding:9px 16px;font-size:.92rem;border-radius:8px 8px 0 0;border-bottom:3px solid transparent;display:flex;align-items:center;gap:7px}
+nav button:hover{background:rgba(255,255,255,.1);color:#fff}
+nav button.activa{background:var(--gris-1);color:var(--azul-osc);font-weight:600}
+nav .nbadge{background:var(--rojo);color:#fff;font-size:.7rem;border-radius:9px;padding:1px 7px;font-weight:700}
+nav button.activa .nbadge{background:var(--rojo)}
+
+main{max-width:1500px;margin:0 auto;padding:20px 22px 60px}
+.vista{display:none}
+.vista.activa{display:block}
+
+/* ---------- Tarjetas y utilitarios ---------- */
+.card{background:#fff;border-radius:var(--radio);box-shadow:var(--sombra);padding:20px;margin-bottom:18px}
+.card h2{font-size:1.05rem;color:var(--azul-osc);margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.card h3{font-size:.95rem;color:var(--azul-osc);margin:14px 0 8px}
+.card .sub{color:var(--gris-4);font-size:.85rem;margin-bottom:14px}
+.fila-flex{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.btn{border:1px solid var(--gris-3);background:#fff;color:var(--tinta);padding:8px 16px;border-radius:8px;font-size:.9rem;display:inline-flex;align-items:center;gap:7px;transition:.15s}
+.btn:hover{border-color:var(--azul);color:var(--azul)}
+.btn.primario{background:var(--azul);border-color:var(--azul);color:#fff;font-weight:600}
+.btn.primario:hover{background:var(--azul-osc)}
+.btn.peligro{color:var(--rojo);border-color:#eec5c4}
+.btn.peligro:hover{background:var(--rojo-bg)}
+.btn.mini{padding:4px 10px;font-size:.8rem;border-radius:6px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:20px;font-size:.78rem;font-weight:600;white-space:nowrap}
+.chip.gris{background:var(--gris-2);color:var(--gris-4)}
+.chip.azul{background:var(--azul-claro);color:var(--azul-osc)}
+.chip.verde{background:var(--verde-bg);color:var(--verde)}
+.chip.ambar{background:var(--ambar-bg);color:var(--ambar)}
+.chip.rojo{background:var(--rojo-bg);color:var(--rojo)}
+.chip.morado{background:var(--morado-bg);color:var(--morado)}
+.chip.teal{background:var(--teal-bg);color:var(--teal)}
+.chip.cian{background:var(--cian-bg);color:var(--cian)}
+.chip.negro{background:#2a323c;color:#fff}
+.aviso{border-left:4px solid var(--azul);background:var(--azul-claro);padding:10px 14px;border-radius:6px;font-size:.87rem;margin:10px 0}
+.aviso.ambar{border-color:var(--ambar);background:var(--ambar-bg)}
+.aviso.rojo{border-color:var(--rojo);background:var(--rojo-bg)}
+.aviso.verde{border-color:var(--verde);background:var(--verde-bg)}
+.vacio{color:var(--gris-4);text-align:center;padding:30px 10px;font-size:.9rem}
+
+/* ---------- Vista Carga ---------- */
+.zona-drop{border:2px dashed var(--gris-3);border-radius:var(--radio);padding:34px 20px;text-align:center;color:var(--gris-4);transition:.2s;background:var(--gris-1)}
+.zona-drop.sobre{border-color:var(--azul);background:var(--azul-claro);color:var(--azul-osc)}
+.zona-drop .ico{font-size:2.2rem;margin-bottom:8px}
+.zona-drop strong{color:var(--tinta)}
+.resumen-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-top:14px}
+.kpi{background:var(--gris-1);border:1px solid var(--gris-2);border-radius:8px;padding:12px 14px}
+.kpi b{display:block;font-size:1.5rem;color:var(--azul-osc)}
+.kpi span{font-size:.78rem;color:var(--gris-4)}
+
+/* ---------- Tabla de equipos ---------- */
+.barra-tabla{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.buscador{position:relative;flex:1;min-width:220px;max-width:380px}
+.buscador input{width:100%;padding:8px 12px 8px 34px;border:1px solid var(--gris-3);border-radius:8px}
+.buscador::before{content:"🔍";position:absolute;left:10px;top:8px;font-size:.85rem;opacity:.6}
+.contador{font-size:.85rem;color:var(--gris-4)}
+.envoltura-tabla{overflow:auto;border:1px solid var(--gris-2);border-radius:8px;max-height:calc(100vh - 290px);background:#fff}
+table.equipos{border-collapse:separate;border-spacing:0;width:100%;font-size:.85rem}
+table.equipos thead th{position:sticky;top:0;background:var(--azul-osc);color:#fff;padding:0;white-space:nowrap;z-index:5;border-right:1px solid rgba(255,255,255,.12)}
+.th-int{display:flex;align-items:center;gap:4px;padding:9px 6px 9px 10px}
+.th-int .tit{font-weight:600;font-size:.8rem}
+.btn-filtro{background:transparent;border:none;color:rgba(255,255,255,.65);font-size:.7rem;padding:3px 5px;border-radius:4px;line-height:1}
+.btn-filtro:hover{background:rgba(255,255,255,.18);color:#fff}
+.btn-filtro.activo{background:#ffd34d;color:#5b4300}
+table.equipos tbody td{padding:7px 10px;border-bottom:1px solid var(--gris-2);border-right:1px solid var(--gris-1);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+table.equipos tbody tr{cursor:pointer}
+table.equipos tbody tr:hover td{background:var(--azul-claro)}
+.paginacion{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;font-size:.85rem;color:var(--gris-4)}
+.paginacion select,.paginacion button{padding:5px 10px;border:1px solid var(--gris-3);border-radius:6px;background:#fff}
+
+/* ---------- Popover de filtro ---------- */
+#filtro-pop{position:absolute;z-index:90;background:#fff;border:1px solid var(--gris-3);border-radius:10px;box-shadow:0 8px 28px rgba(16,32,51,.25);width:270px;display:none;color:var(--tinta)}
+#filtro-pop .fp-cab{padding:10px 12px;border-bottom:1px solid var(--gris-2);font-weight:600;font-size:.85rem;color:var(--azul-osc)}
+#filtro-pop .fp-sec{padding:8px 12px;border-bottom:1px solid var(--gris-2);display:flex;gap:6px}
+#filtro-pop .fp-sec button{flex:1;font-size:.78rem;padding:5px 6px;border:1px solid var(--gris-3);border-radius:6px;background:#fff}
+#filtro-pop .fp-sec button:hover{border-color:var(--azul);color:var(--azul)}
+#filtro-pop input.fp-buscar{margin:8px 12px 4px;width:calc(100% - 24px);padding:6px 10px;border:1px solid var(--gris-3);border-radius:6px;font-size:.83rem}
+#filtro-pop .fp-lista{max-height:230px;overflow:auto;padding:4px 6px 8px}
+#filtro-pop .fp-lista label{display:flex;align-items:center;gap:7px;padding:4px 8px;border-radius:5px;font-size:.83rem;cursor:pointer}
+#filtro-pop .fp-lista label:hover{background:var(--gris-1)}
+#filtro-pop .fp-lista .cnt{margin-left:auto;color:var(--gris-4);font-size:.74rem}
+#filtro-pop .fp-pie{display:flex;gap:8px;padding:9px 12px;border-top:1px solid var(--gris-2)}
+#filtro-pop .fp-pie button{flex:1;padding:6px;font-size:.82rem;border-radius:6px;border:1px solid var(--gris-3);background:#fff}
+#filtro-pop .fp-pie .ok{background:var(--azul);border-color:var(--azul);color:#fff;font-weight:600}
+
+/* ---------- Detalle ---------- */
+.det-cab{display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.det-cab h2{font-size:1.25rem}
+.det-acciones{margin-left:auto;display:flex;gap:10px;flex-wrap:wrap}
+.grid-campos{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:10px;margin-top:14px}
+.campo-box{background:var(--gris-1);border:1px solid var(--gris-2);border-radius:8px;padding:8px 12px}
+.campo-box label{display:block;font-size:.7rem;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-4);margin-bottom:2px}
+.campo-box div{font-size:.92rem;font-weight:600;word-break:break-word}
+.grid-meses{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px}
+.mes-box{border:1px solid var(--gris-2);border-radius:8px;padding:8px 10px;background:#fff;min-height:74px}
+.mes-box.con-prog{border-color:var(--azul);background:var(--azul-claro)}
+.mes-box h4{font-size:.74rem;text-transform:uppercase;color:var(--gris-4);margin-bottom:5px}
+.mes-box .codigos{display:flex;flex-direction:column;gap:4px;align-items:flex-start}
+table.lista{width:100%;border-collapse:collapse;font-size:.86rem}
+table.lista th{text-align:left;padding:8px 10px;background:var(--gris-1);color:var(--gris-4);font-size:.74rem;text-transform:uppercase;letter-spacing:.4px;border-bottom:2px solid var(--gris-2)}
+table.lista td{padding:8px 10px;border-bottom:1px solid var(--gris-2);vertical-align:top}
+table.lista tr.click{cursor:pointer}
+table.lista tr.click:hover td{background:var(--azul-claro)}
+
+/* ---------- Modales ---------- */
+.modal-fondo{display:none;position:fixed;inset:0;background:rgba(10,24,40,.55);z-index:100;padding:24px;overflow:auto}
+.modal-fondo.abierto{display:flex;align-items:flex-start;justify-content:center}
+.modal{background:#fff;border-radius:14px;max-width:680px;width:100%;box-shadow:0 18px 60px rgba(0,0,0,.35);margin:auto}
+.modal-cab{padding:16px 22px;border-bottom:1px solid var(--gris-2);display:flex;align-items:center;gap:10px}
+.modal-cab h2{font-size:1.05rem;color:var(--azul-osc)}
+.modal-cab .sub-eq{font-size:.8rem;color:var(--gris-4);display:block}
+.modal-cab .cerrar{margin-left:auto;background:none;border:none;font-size:1.3rem;color:var(--gris-4);padding:4px 8px;border-radius:6px}
+.modal-cab .cerrar:hover{background:var(--gris-1);color:var(--rojo)}
+.modal-cuerpo{padding:18px 22px;display:flex;flex-direction:column;gap:14px}
+.modal-pie{padding:14px 22px;border-top:1px solid var(--gris-2);display:flex;gap:10px;justify-content:flex-end}
+.f-grupo label.et{display:block;font-size:.8rem;font-weight:600;color:var(--tinta);margin-bottom:5px}
+.f-grupo label.et .req{color:var(--rojo)}
+.f-grupo input[type=date],.f-grupo input[type=text],.f-grupo select,.f-grupo textarea{width:100%;padding:8px 11px;border:1px solid var(--gris-3);border-radius:8px;background:#fff}
+.f-grupo textarea{resize:vertical;min-height:64px}
+.f-grupo input:focus,.f-grupo select:focus,.f-grupo textarea:focus{outline:2px solid var(--azul-claro);border-color:var(--azul)}
+.f-2col{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:560px){.f-2col{grid-template-columns:1fr}}
+.toggle-par{display:flex;gap:8px}
+.toggle-par button{flex:1;padding:8px;border:1px solid var(--gris-3);border-radius:8px;background:#fff;font-size:.88rem}
+.toggle-par button.sel-verde{background:var(--verde-bg);border-color:var(--verde);color:var(--verde);font-weight:700}
+.toggle-par button.sel-rojo{background:var(--rojo-bg);border-color:var(--rojo);color:var(--rojo);font-weight:700}
+.toggle-par button.sel-azul{background:var(--azul-claro);border-color:var(--azul);color:var(--azul-osc);font-weight:700}
+.toggle-par button.sel-ambar{background:var(--ambar-bg);border-color:var(--ambar);color:var(--ambar);font-weight:700}
+.check-linea{display:flex;align-items:center;gap:9px;font-size:.9rem;cursor:pointer}
+.check-linea input{width:17px;height:17px;accent-color:var(--azul)}
+.atajos{display:flex;gap:6px;margin-top:6px}
+.atajos button{font-size:.76rem;padding:4px 10px;border:1px solid var(--gris-3);border-radius:14px;background:var(--gris-1)}
+.atajos button:hover{border-color:var(--azul);color:var(--azul)}
+.lista-tareas{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.tarea{display:flex;align-items:center;gap:9px;background:var(--gris-1);border:1px solid var(--gris-2);border-radius:7px;padding:6px 10px;font-size:.88rem}
+.tarea input[type=checkbox]{accent-color:var(--verde);width:16px;height:16px}
+.tarea.hecha span{text-decoration:line-through;color:var(--gris-4)}
+.tarea .quitar{margin-left:auto;border:none;background:none;color:var(--gris-4);font-size:1rem;padding:2px 6px;border-radius:5px}
+.tarea .quitar:hover{color:var(--rojo);background:#fff}
+.log-gestion{display:flex;flex-direction:column;gap:8px;max-height:180px;overflow:auto;margin-bottom:8px}
+.log-item{background:var(--gris-1);border-left:3px solid var(--azul);border-radius:0 7px 7px 0;padding:7px 11px;font-size:.85rem}
+.log-item time{display:block;font-size:.72rem;color:var(--gris-4);margin-bottom:2px}
+
+/* ---------- Códigos ---------- */
+.grid-cod{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:18px}
+table.cod{width:100%;border-collapse:collapse;font-size:.86rem}
+table.cod th{background:var(--gris-1);text-align:left;padding:7px 10px;font-size:.75rem;text-transform:uppercase;color:var(--gris-4);border-bottom:2px solid var(--gris-2)}
+table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
+
+/* ---------- Toast ---------- */
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:#243140;color:#fff;padding:11px 22px;border-radius:30px;font-size:.9rem;box-shadow:var(--sombra);opacity:0;transition:.3s;z-index:200;pointer-events:none;max-width:90vw;text-align:center}
+#toast.ver{opacity:1;transform:translateX(-50%) translateY(0)}
+
+@media print{header nav,.det-acciones,.barra-tabla,.paginacion{display:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="logo">🏥</div>
+    <div>
+      <h1>Sistema de Gestión MP 2026</h1>
+      <small>Programa de Mantenciones Preventivas de Equipos · Equipamiento Clínico HHHA</small>
+    </div>
+  </div>
+  <nav id="nav-principal">
+    <button data-vista="carga">📂 Carga de Datos</button>
+    <button data-vista="equipos">🛠 Equipos <span class="nbadge" id="badge-equipos" style="display:none"></span></button>
+    <button data-vista="pendientes">📋 Pendientes <span class="nbadge" id="badge-pend" style="display:none"></span></button>
+    <button data-vista="codigos">📖 Códigos y Reglas</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ============ VISTA: CARGA ============ -->
+<section class="vista" id="vista-carga">
+  <div class="card">
+    <h2>Paso 1 · Cargar la base de datos de equipos</h2>
+    <p class="sub">Archivo <strong>ProgramaciónMP2026</strong> (.xlsx) — se leen las hojas <strong>PMP_2026</strong> (equipos y programación, encabezados en fila 7, datos desde fila 8) y <strong>Registro_MP-2026</strong> (registro de mantenciones, encabezados en filas 6–7, datos desde fila 8).</p>
+    <div class="zona-drop" id="zona-drop">
+      <div class="ico">📄</div>
+      <p><strong>Arrastra aquí el archivo Excel</strong> o</p>
+      <p style="margin-top:10px"><button class="btn primario" id="btn-elegir">Seleccionar archivo…</button>
+         <button class="btn" id="btn-ejemplo">Cargar datos de ejemplo</button></p>
+      <input type="file" id="input-archivo" accept=".xlsx,.xlsm,.xls" style="display:none">
+    </div>
+    <div id="aviso-xlsx" class="aviso rojo" style="display:none">⚠️ No se encontró la librería <code>js/xlsx.full.min.js</code>. La lectura de archivos Excel está deshabilitada (los datos de ejemplo siguen disponibles).</div>
+    <div class="aviso" style="margin-top:14px">
+      ℹ️ Se incluyen <strong>todos los registros sin excepción</strong> (incluso con valor 0); ninguna fila se descarta.
+      <strong>Serie</strong> y <strong>N° Inventario</strong> se leen como texto conservando los ceros a la izquierda («00039» no se convierte en «39»), tanto en la carga como en la vista y en las exportaciones.
+      El <strong>ID</strong> es solo el orden de fila: el identificador único de cada equipo es la <strong>Serie</strong> o el <strong>N° Inventario</strong>.
+    </div>
+  </div>
+  <div class="card" id="card-resumen" style="display:none">
+    <h2>Resumen de la carga</h2>
+    <p class="sub" id="resumen-meta"></p>
+    <div class="resumen-grid" id="resumen-kpis"></div>
+    <div id="resumen-avisos"></div>
+    <div class="fila-flex" style="margin-top:16px">
+      <button class="btn primario" onclick="mostrarVista('equipos')">Ir a la vista de equipos →</button>
+      <button class="btn peligro" id="btn-borrar-todo">🗑 Borrar todos los datos</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ VISTA: EQUIPOS ============ -->
+<section class="vista" id="vista-equipos">
+  <div class="card">
+    <h2>Paso 2 · Vista de equipos</h2>
+    <p class="sub">Cada columna cuenta con filtros tipo Excel (selección múltiple, búsqueda y orden). Presiona una fila para abrir el detalle del equipo.</p>
+    <div class="barra-tabla">
+      <div class="buscador"><input type="text" id="busqueda-global" placeholder="Buscar en todas las columnas…"></div>
+      <button class="btn mini" id="btn-limpiar-filtros" style="display:none">✕ Limpiar filtros</button>
+      <span class="contador" id="contador-filas"></span>
+      <span style="flex:1"></span>
+      <button class="btn" id="btn-exportar">⬇ Exportar Excel</button>
+    </div>
+    <div class="envoltura-tabla">
+      <table class="equipos">
+        <thead><tr id="thead-equipos"></tr></thead>
+        <tbody id="tbody-equipos"></tbody>
+      </table>
+    </div>
+    <div class="paginacion">
+      <label>Filas por página
+        <select id="sel-pagina"><option>50</option><option selected>100</option><option>250</option><option value="all">Todas</option></select>
+      </label>
+      <button id="pag-prev">‹ Anterior</button>
+      <span id="pag-info"></span>
+      <button id="pag-next">Siguiente ›</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ VISTA: DETALLE ============ -->
+<section class="vista" id="vista-detalle">
+  <div class="card">
+    <button class="btn mini" onclick="mostrarVista('equipos')">← Volver a equipos</button>
+    <div class="det-cab" style="margin-top:12px">
+      <div>
+        <h2 id="det-titulo"></h2>
+        <div class="fila-flex" id="det-chips" style="margin-top:6px"></div>
+      </div>
+      <div class="det-acciones">
+        <button class="btn primario" id="btn-abrir-mp">🔧 Mantenimiento Preventivo</button>
+        <button class="btn" id="btn-abrir-pendiente">📋 Pendientes</button>
+      </div>
+    </div>
+    <div class="grid-campos" id="det-campos"></div>
+  </div>
+
+  <div class="card">
+    <h2>Programación y resultados 2026</h2>
+    <p class="sub">Programación según hoja PMP_2026 y resultados según hoja Registro_MP-2026.</p>
+    <div class="grid-meses" id="det-meses"></div>
+    <div id="det-obs-planilla"></div>
+  </div>
+
+  <div class="card">
+    <h2>Historial de mantenciones</h2>
+    <div id="det-historial"></div>
+  </div>
+
+  <div class="card">
+    <h2>Pendientes del equipo</h2>
+    <div id="det-pendientes"></div>
+  </div>
+</section>
+
+<!-- ============ VISTA: PENDIENTES ============ -->
+<section class="vista" id="vista-pendientes">
+  <div class="card">
+    <h2>Pendientes</h2>
+    <p class="sub">Gestiones pendientes asociadas a los equipos. Presiona un pendiente para ver o actualizar su gestión.</p>
+    <div class="fila-flex" style="margin-bottom:12px" id="filtros-pend">
+      <button class="btn mini" data-fp="abiertos">Abiertos</button>
+      <button class="btn mini" data-fp="vencidos">Vencidos</button>
+      <button class="btn mini" data-fp="completados">Completados</button>
+      <button class="btn mini" data-fp="todos">Todos</button>
+    </div>
+    <div id="lista-pendientes"></div>
+  </div>
+</section>
+
+<!-- ============ VISTA: CÓDIGOS ============ -->
+<section class="vista" id="vista-codigos">
+  <div class="grid-cod">
+    <div class="card">
+      <h2>Códigos de programación <span class="chip gris">Paso 3</span></h2>
+      <p class="sub">Hoja PMP_2026 · meses en columnas T–AE (Ene–Dic), un valor por mes.</p>
+      <table class="cod"><tr><th>Código</th><th>Significado</th></tr>
+        <tr><td><span class="chip azul">X</span></td><td>Mantención Preventiva Programada</td></tr>
+        <tr><td><span class="chip ambar">R</span></td><td>Mantención Preventiva Reprogramada</td></tr>
+        <tr><td><span class="chip morado">RA</span></td><td>Mantención Preventiva Reprogramada de Año Anterior</td></tr>
+        <tr><td><span class="chip cian">PM</span></td><td>Puesta en Marcha</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <h2>Resultados de mantención <span class="chip gris">Paso 5</span></h2>
+      <p class="sub">Hoja Registro_MP-2026 · columna R (Resultado) de cada mes.</p>
+      <table class="cod"><tr><th>Código</th><th>Significado</th></tr>
+        <tr><td><span class="chip verde">Si</span></td><td>Mantención Preventiva Realizada</td></tr>
+        <tr><td><span class="chip ambar">C1 – C8</span></td><td>Mantención Preventiva Reprogramada (ver causales)</td></tr>
+        <tr><td><span class="chip teal">Si-RA</span></td><td>Mantención de Año Anterior Realizada</td></tr>
+        <tr><td><span class="chip rojo">FS</span></td><td>Fuera de Servicio</td></tr>
+        <tr><td><span class="chip rojo">No</span></td><td>No Realizada</td></tr>
+        <tr><td><span class="chip morado">NU</span></td><td>No Ubicable</td></tr>
+        <tr><td><span class="chip negro">Baja</span></td><td>Equipo Dado de Baja</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <h2>Causales de reprogramación <span class="chip gris">Paso 6</span></h2>
+      <table class="cod" id="tabla-causales"><tr><th>Código</th><th>Descripción</th></tr></table>
+      <div class="aviso ambar" style="margin-top:12px"><strong>C2, C3, C4:</strong> no se fija nueva fecha; la mantención se registra en el mes real de ejecución una vez que el equipo sea reintegrado.</div>
+      <div class="aviso" ><strong>C1, C5, C6, C7, C8:</strong> debe reprogramarse dentro de los 30 días siguientes. El mes original conserva <strong>X</strong> en la columna P y la causal en la columna R; el mes de destino lleva <strong>R</strong> en la columna P.</div>
+    </div>
+    <div class="card">
+      <h2>Regla de carga — Oficial / Borrador <span class="chip gris">Paso 4</span></h2>
+      <ul style="padding-left:20px;font-size:.9rem;line-height:1.7">
+        <li>Todo registro de mantención leído desde la planilla se marca automáticamente como <span class="chip verde">Oficial</span>.</li>
+        <li>Si en la aplicación existe un registro guardado como <span class="chip ambar">Borrador</span> y, al volver a cargar la planilla, esa mantención aparece en ella, el registro se actualiza a <span class="chip verde">Oficial</span>.</li>
+        <li>Si no aparece en la planilla recargada, conserva su estado de <span class="chip ambar">Borrador</span>.</li>
+      </ul>
+      <h3>Estructura del registro (hoja Registro_MP-2026)</h3>
+      <p class="sub" style="margin-bottom:8px">Cada mes ocupa dos columnas: <strong>P</strong> (Programa: X / R / RA / PM) y <strong>R</strong> (Resultado). La columna <strong>AR</strong> es Observación. Se ignoran los valores no válidos (ceros de relleno y números sueltos como «22» o «27»).</p>
+      <table class="cod" id="tabla-meses-cols"><tr><th>Mes</th><th>Columna P</th><th>Columna R</th></tr></table>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ============ MODAL: MANTENIMIENTO PREVENTIVO (Paso 8) ============ -->
+<div class="modal-fondo" id="modal-mp">
+  <div class="modal">
+    <div class="modal-cab">
+      <h2>🔧 Mantenimiento Preventivo<span class="sub-eq" id="mp-equipo-nombre"></span></h2>
+      <button class="cerrar" data-cerrar="modal-mp">✕</button>
+    </div>
+    <div class="modal-cuerpo">
+      <div class="f-2col">
+        <div class="f-grupo">
+          <label class="et">Fecha de la mantención <span class="req">*</span></label>
+          <input type="date" id="mp-fecha">
+        </div>
+        <div class="f-grupo">
+          <label class="et">Programación <span class="req">*</span></label>
+          <select id="mp-programacion">
+            <option value="">— Seleccionar —</option>
+            <option value="X">X — Mantención Preventiva Programada</option>
+            <option value="R">R — Mantención Preventiva Reprogramada</option>
+            <option value="RA">RA — Reprogramada de Año Anterior</option>
+            <option value="PM">PM — Puesta en Marcha</option>
+          </select>
+        </div>
+      </div>
+      <div class="f-2col">
+        <div class="f-grupo">
+          <label class="et">Ejecutor <span class="req">*</span></label>
+          <select id="mp-ejecutor"><option value="">— Seleccionar —</option></select>
+        </div>
+        <div class="f-grupo">
+          <label class="et">Resultado <span class="req">*</span></label>
+          <select id="mp-resultado"><option value="">— Seleccionar —</option></select>
+        </div>
+      </div>
+      <div id="mp-hint"></div>
+      <div class="f-grupo">
+        <label class="et">Observaciones <span style="color:var(--gris-4);font-weight:400">(opcional)</span></label>
+        <textarea id="mp-observaciones" placeholder="Detalle de la mantención, repuestos, condiciones del equipo…"></textarea>
+      </div>
+      <div class="f-2col">
+        <div class="f-grupo">
+          <label class="et">Estado del equipo</label>
+          <div class="toggle-par" id="mp-estado">
+            <button type="button" data-v="Operativo">✔ Operativo</button>
+            <button type="button" data-v="No Operativo">✖ No Operativo</button>
+          </div>
+        </div>
+        <div class="f-grupo">
+          <label class="et">Tipo de registro</label>
+          <div class="toggle-par" id="mp-tipo">
+            <button type="button" data-v="Oficial">Oficial</button>
+            <button type="button" data-v="Borrador">Borrador</button>
+          </div>
+        </div>
+      </div>
+      <label class="check-linea"><input type="checkbox" id="mp-gestion"> Gestión pendiente: <strong id="mp-gestion-txt">No</strong></label>
+    </div>
+    <div class="modal-pie">
+      <button class="btn" data-cerrar="modal-mp">Cancelar</button>
+      <button class="btn primario" id="mp-guardar">💾 Guardar mantención</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: PENDIENTES (Paso 9) ============ -->
+<div class="modal-fondo" id="modal-pend">
+  <div class="modal">
+    <div class="modal-cab">
+      <h2>📋 Pendiente<span class="sub-eq" id="pe-equipo-nombre"></span></h2>
+      <button class="cerrar" data-cerrar="modal-pend">✕</button>
+    </div>
+    <div class="modal-cuerpo">
+      <div class="f-2col">
+        <div class="f-grupo">
+          <label class="et">Fecha de compromiso <span class="req">*</span></label>
+          <input type="date" id="pe-fecha">
+          <div class="atajos">
+            <button type="button" data-dias="0">Hoy</button>
+            <button type="button" data-dias="3">3 días</button>
+            <button type="button" data-dias="7">1 semana</button>
+          </div>
+        </div>
+        <div class="f-grupo">
+          <label class="et">Tipo de pendiente <span class="req">*</span></label>
+          <select id="pe-tipo"></select>
+        </div>
+      </div>
+      <div class="f-grupo">
+        <label class="et">Descripción <span style="color:var(--gris-4);font-weight:400">(opcional)</span></label>
+        <textarea id="pe-descripcion" placeholder="Describe el pendiente…"></textarea>
+      </div>
+      <div class="f-grupo">
+        <label class="et">Tareas</label>
+        <div class="fila-flex">
+          <input type="text" id="pe-tarea-nueva" placeholder="Nueva tarea… (Enter para agregar)" style="flex:1;padding:8px 11px;border:1px solid var(--gris-3);border-radius:8px">
+          <button class="btn mini" id="pe-tarea-add">＋ Agregar</button>
+        </div>
+        <div class="lista-tareas" id="pe-tareas"></div>
+      </div>
+      <div class="f-2col">
+        <div class="f-grupo">
+          <label class="et">Responsable Administrativo <span class="req">*</span></label>
+          <select id="pe-resp-adm"></select>
+        </div>
+        <div class="f-grupo">
+          <label class="et">Responsable Ejecutivo <span class="req">*</span></label>
+          <select id="pe-resp-eje"><option value="">— Seleccionar —</option></select>
+        </div>
+      </div>
+      <div class="f-grupo">
+        <label class="et">Gestión asociada</label>
+        <div class="log-gestion" id="pe-log"></div>
+        <div class="fila-flex">
+          <input type="text" id="pe-gestion-nueva" placeholder="Registrar actualización del pendiente… (Enter para agregar)" style="flex:1;padding:8px 11px;border:1px solid var(--gris-3);border-radius:8px">
+          <button class="btn mini" id="pe-gestion-add">＋ Registrar</button>
+        </div>
+      </div>
+      <div class="f-grupo" id="pe-estado-grupo" style="display:none">
+        <label class="et">Estado del pendiente</label>
+        <div class="toggle-par" id="pe-estado">
+          <button type="button" data-v="Abierto">Abierto</button>
+          <button type="button" data-v="Completado">✔ Completado</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-pie">
+      <button class="btn peligro" id="pe-eliminar" style="display:none;margin-right:auto">🗑 Eliminar</button>
+      <button class="btn" data-cerrar="modal-pend">Cancelar</button>
+      <button class="btn primario" id="pe-guardar">💾 Guardar pendiente</button>
+    </div>
+  </div>
+</div>
+
+<div id="filtro-pop"></div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+/* =====================================================================
+   SISTEMA DE GESTIÓN MP 2026 — Equipamiento Clínico HHHA
+   Implementación del flujo de trabajo (Pasos 1 a 9) de la
+   especificación "Flujo_Sistema_Gestion_MP_2026".
+   ===================================================================== */
+
+/* ---------- Constantes de la especificación ---------- */
+const CAMPOS = [
+  {k:'id',          l:'ID',                col:'B'},
+  {k:'carpeta',     l:'N° Carpeta',        col:'C'},
+  {k:'inventario',  l:'N° Inventario',     col:'D'},
+  {k:'equipo',      l:'Equipo',            col:'E'},
+  {k:'servicio',    l:'Servicio',          col:'F'},
+  {k:'unidad',      l:'Unidad',            col:'G'},
+  {k:'ubicacion',   l:'Ubicación',         col:'H'},
+  {k:'procedencia', l:'Procedencia',       col:'I'},
+  {k:'marca',       l:'Marca',             col:'J'},
+  {k:'modelo',      l:'Modelo',            col:'K'},
+  {k:'serie',       l:'Serie',             col:'L'},
+  {k:'anio',        l:'Año Instalación',   col:'M'},
+  {k:'vidaUtil',    l:'Vida Útil Residual',col:'N'},
+  {k:'clasificacion',l:'Clasificación',    col:'O'},
+  {k:'enu',         l:'ENU / Baja',        col:'P'}
+];
+const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const MESES_PMP_COLS = ['T','U','V','W','X','Y','Z','AA','AB','AC','AD','AE'];     // Paso 3
+const MESES_REG_COLS = [                                                          // Paso 4
+  ['T','U'],['V','W'],['X','Y'],['Z','AA'],['AB','AC'],['AD','AE'],
+  ['AF','AG'],['AH','AI'],['AJ','AK'],['AL','AM'],['AN','AO'],['AP','AQ']
+];
+const COL_OBS_REG = 'AR';
+const PROG_CODES = {X:'Mantención Preventiva Programada', R:'Mantención Preventiva Reprogramada', RA:'Mantención Preventiva Reprogramada de Año Anterior', PM:'Puesta en Marcha'};
+const CAUSALES = {
+  C1:'Imposibilidad de desocupar el equipo del paciente por indicación clínica',
+  C2:'Equipo en servicio técnico',
+  C3:'Equipo no operativo, a la espera de repuestos o accesorios',
+  C4:'Equipo en préstamo a otro hospital o institución',
+  C5:'No disponibilidad de horas hombre del funcionario SEC por alta carga laboral',
+  C6:'No disponibilidad de horas hombre del servicio técnico externo',
+  C7:'Ausencia justificada del funcionario SEC superior a 15 días',
+  C8:'Contingencia hospitalaria'
+};
+const RESULTADOS = {
+  'Si':'Mantención Preventiva Realizada',
+  'C1':'Reprogramada — '+CAUSALES.C1, 'C2':'Reprogramada — '+CAUSALES.C2,
+  'C3':'Reprogramada — '+CAUSALES.C3, 'C4':'Reprogramada — '+CAUSALES.C4,
+  'C5':'Reprogramada — '+CAUSALES.C5, 'C6':'Reprogramada — '+CAUSALES.C6,
+  'C7':'Reprogramada — '+CAUSALES.C7, 'C8':'Reprogramada — '+CAUSALES.C8,
+  'Si-RA':'Mantención de Año Anterior Realizada',
+  'FS':'Fuera de Servicio', 'No':'No Realizada', 'NU':'No Ubicable', 'Baja':'Equipo Dado de Baja'
+};
+const ORDEN_RESULTADOS = ['Si','C1','C2','C3','C4','C5','C6','C7','C8','Si-RA','FS','No','NU','Baja'];
+const EJECUTORES = [
+  'Carlos Bahamondes Seguel','Cristián Beltrán Oviedo','Cristina Rozas Urrutia',
+  'Daniel Díaz Neira','Ignacio Berner Bergara','Macarena Toledo','Marco Ulloa',
+  'Matías Soazo Garrido','Ricardo Matus Aroca','Tito Millapán Riquelme','Personal Externo'
+];
+const RESP_ADM_DEFECTO = 'Cristián Beltrán Oviedo';
+const TIPOS_PENDIENTE = [
+  'Reprogramación Mantención Preventiva','Protocolo Interno de Mantenimiento',
+  'Protocolo Externo de Mantenimiento','Pauta de Monitoreo Diario','Imprimir Documento','Otro'
+];
+const REPRO_30DIAS = ['C1','C5','C6','C7','C8'];   // Paso 6: reprogramar dentro de 30 días
+const REPRO_SIN_FECHA = ['C2','C3','C4'];          // Paso 6: sin nueva fecha
+
+/* ---------- Estado de la aplicación ---------- */
+let state = {
+  equipos: [],      // Paso 1: {key, fila, id, carpeta, inventario, ..., prog:{mes:codigo}, regObs}
+  registros: [],    // Pasos 3-4 (planilla): {equipoKey, mes, programa, resultado, obs}
+  manuales: [],     // Paso 8: registros guardados en la aplicación
+  pendientes: [],   // Paso 9
+  meta: null        // {archivo, fechaCarga, avisos...}
+};
+let filtros = {};                       // {campo: Set(valores)}
+let orden = {k:null, dir:1};
+let busqueda = '';
+let pagina = 0;
+let filtroPend = 'abiertos';
+let detalleKey = null;                  // equipo abierto en la vista de detalle
+let cacheFiltradas = null;
+
+/* ---------- Utilidades ---------- */
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const sinAcentos = s => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+function hoyISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function sumarDias(iso,n){ const d=new Date(iso+'T12:00:00'); d.setDate(d.getDate()+n); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function fmtFecha(iso){ if(!iso) return '—'; const p=iso.split('-'); return p.length===3 ? p[2]+'-'+p[1]+'-'+p[0] : iso; }
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('ver'); clearTimeout(t._tm); t._tm=setTimeout(()=>t.classList.remove('ver'),2800); }
+
+function chipPrograma(c){
+  const cl = {X:'azul',R:'ambar',RA:'morado',PM:'cian'}[c]||'gris';
+  return c ? `<span class="chip ${cl}" title="${esc(PROG_CODES[c]||'')}">${c}</span>` : '';
+}
+function chipResultado(c){
+  if(!c) return '';
+  let cl='gris';
+  if(c==='Si') cl='verde'; else if(c==='Si-RA') cl='teal';
+  else if(/^C[1-8]$/.test(c)) cl='ambar'; else if(c==='FS'||c==='No') cl='rojo';
+  else if(c==='NU') cl='morado'; else if(c==='Baja') cl='negro';
+  return `<span class="chip ${cl}" title="${esc(RESULTADOS[c]||'')}">${c}</span>`;
+}
+
+/* ---------- Persistencia (localStorage) ---------- */
+const LS_DATOS='gmp2026.datos', LS_USUARIO='gmp2026.usuario';
+function guardar(){
+  try{ localStorage.setItem(LS_USUARIO, JSON.stringify({manuales:state.manuales, pendientes:state.pendientes})); }
+  catch(e){ toast('⚠️ No fue posible guardar los registros de usuario (almacenamiento lleno).'); }
+  try{ localStorage.setItem(LS_DATOS, JSON.stringify({equipos:state.equipos, registros:state.registros, meta:state.meta})); }
+  catch(e){ /* la planilla puede superar la cuota: los datos de usuario ya quedaron a salvo */ }
+}
+function cargarLocal(){
+  try{ const u=JSON.parse(localStorage.getItem(LS_USUARIO)||'null'); if(u){ state.manuales=u.manuales||[]; state.pendientes=u.pendientes||[]; } }catch(e){}
+  try{ const d=JSON.parse(localStorage.getItem(LS_DATOS)||'null'); if(d){ state.equipos=d.equipos||[]; state.registros=d.registros||[]; state.meta=d.meta||null; } }catch(e){}
+}
+
+/* =====================================================================
+   PASOS 1, 3 y 4 — LECTURA DE LA PLANILLA
+   ===================================================================== */
+const colIdx = l => XLSX.utils.decode_col(l);
+function celdaTexto(ws, r, c){
+  const cell = ws[XLSX.utils.encode_cell({r,c})];
+  if(!cell) return '';
+  const v = (cell.w !== undefined && cell.w !== null) ? cell.w : cell.v;
+  return (v==null ? '' : String(v)).trim();
+}
+function buscarHoja(wb, objetivo){
+  const norm = s => sinAcentos(String(s)).toLowerCase().replace(/[^a-z0-9]/g,'');
+  const obj = norm(objetivo);
+  let n = wb.SheetNames.find(s => norm(s) === obj);
+  if(!n) n = wb.SheetNames.find(s => norm(s).includes(obj));
+  return n || null;
+}
+function normPrograma(raw){
+  const t = String(raw).trim().toUpperCase();
+  return ['X','R','RA','PM'].includes(t) ? t : '';
+}
+function normResultado(raw){
+  const t = sinAcentos(String(raw).trim()).toUpperCase().replace(/\s+/g,'');
+  if(t==='SI') return 'Si';
+  if(t==='SI-RA'||t==='SIRA') return 'Si-RA';
+  if(/^C[1-8]$/.test(t)) return t;
+  if(t==='FS') return 'FS';
+  if(t==='NO') return 'No';
+  if(t==='NU') return 'NU';
+  if(t==='BAJA') return 'Baja';
+  return '';
+}
+const valorUtil = v => { const t=String(v).trim(); return t!=='' && t!=='0'; };
+
+function procesarWorkbook(wb, nombreArchivo){
+  const avisos = [];
+
+  /* ---- Paso 1: hoja PMP_2026 — equipos (columnas B–P, datos desde fila 8) ---- */
+  const nomPMP = buscarHoja(wb,'PMP_2026');
+  if(!nomPMP){ throw new Error('No se encontró la hoja "PMP_2026" en el archivo. Hojas disponibles: '+wb.SheetNames.join(', ')); }
+  const wsP = wb.Sheets[nomPMP];
+  const rangoP = XLSX.utils.decode_range(wsP['!ref']||'A1:A1');
+  const equipos = [];
+  const mapSerie = new Map(), mapInv = new Map(), llaves = new Set();
+
+  for(let r=7; r<=rangoP.e.r; r++){               // fila 8 (índice 7) en adelante
+    const e = {fila:r+1};
+    let vacia = true;
+    for(const c of CAMPOS){
+      const v = celdaTexto(wsP, r, colIdx(c.col)); // texto: conserva ceros a la izquierda
+      e[c.k] = v;
+      if(v!=='') vacia = false;
+    }
+    if(vacia) continue;                            // solo se omiten filas totalmente vacías
+
+    /* Identificador único: Serie o N° Inventario (el ID es solo orden de fila) */
+    const serieN = e.serie.toUpperCase(), invN = e.inventario.toUpperCase();
+    let key = valorUtil(e.serie) ? 'S:'+serieN : (valorUtil(e.inventario) ? 'I:'+invN : 'F:'+e.fila);
+    if(llaves.has(key)) key += '·F'+e.fila;        // garantiza unicidad ante duplicados
+    llaves.add(key);
+    e.key = key;
+    if(valorUtil(e.serie) && !mapSerie.has(serieN)) mapSerie.set(serieN, key);
+    if(valorUtil(e.inventario) && !mapInv.has(invN)) mapInv.set(invN, key);
+
+    /* ---- Paso 3: programación de la misma hoja (columnas T–AE) ---- */
+    e.prog = {};
+    MESES_PMP_COLS.forEach((col,m)=>{
+      const p = normPrograma(celdaTexto(wsP, r, colIdx(col)));
+      if(p) e.prog[m] = p;
+    });
+    e.regObs = '';
+    equipos.push(e);
+  }
+
+  /* ---- Paso 4: hoja Registro_MP-2026 ---- */
+  const registros = [];
+  let filasSinVinculo = 0, ignorados = 0;
+  const nomReg = buscarHoja(wb,'Registro_MP-2026') || buscarHoja(wb,'Registro_MP_2026') || buscarHoja(wb,'RegistroMP2026');
+  if(!nomReg){
+    avisos.push('No se encontró la hoja "Registro_MP-2026": no se cargaron registros de mantención.');
+  } else {
+    const wsR = wb.Sheets[nomReg];
+    const rangoR = XLSX.utils.decode_range(wsR['!ref']||'A1:A1');
+
+    /* Ubicar columnas Serie / N° Inventario en encabezados (filas 6–7), con respaldo en L y D */
+    let cSerie = colIdx('L'), cInv = colIdx('D');
+    for(const rh of [5,6]){
+      for(let c=colIdx('B'); c<=colIdx('S'); c++){
+        const h = sinAcentos(celdaTexto(wsR, rh, c)).toLowerCase();
+        if(h.includes('serie')) cSerie = c;
+        else if(h.includes('inventario')) cInv = c;
+      }
+    }
+    for(let r=7; r<=rangoR.e.r; r++){
+      const serie = celdaTexto(wsR, r, cSerie).toUpperCase();
+      const inv = celdaTexto(wsR, r, cInv).toUpperCase();
+      /* Vincular con su equipo mediante la Serie o el N° Inventario */
+      const key = (valorUtil(serie) && mapSerie.get(serie)) || (valorUtil(inv) && mapInv.get(inv)) || null;
+      const obs = celdaTexto(wsR, r, colIdx(COL_OBS_REG));
+      let filaConDatos = false;
+      const regsFila = [];
+      MESES_REG_COLS.forEach((par,m)=>{
+        const rawP = celdaTexto(wsR, r, colIdx(par[0]));
+        const rawR = celdaTexto(wsR, r, colIdx(par[1]));
+        const p = normPrograma(rawP);
+        const res = normResultado(rawR);
+        /* Ignorar valores no válidos (ceros de relleno y números sueltos como "22" o "27") */
+        if(rawP!=='' && rawP!=='0' && !p) ignorados++;
+        if(rawR!=='' && rawR!=='0' && !res) ignorados++;
+        if(p || res){ filaConDatos = true; regsFila.push({mes:m, programa:p, resultado:res, obs}); }
+      });
+      if(!filaConDatos) continue;
+      if(!key){ filasSinVinculo++; continue; }
+      regsFila.forEach(g => registros.push({equipoKey:key, mes:g.mes, programa:g.programa, resultado:g.resultado, obs:g.obs}));
+      const eq = equipos.find(x=>x.key===key);
+      if(eq && obs) eq.regObs = obs;
+    }
+    if(filasSinVinculo) avisos.push(filasSinVinculo+' fila(s) del registro no pudieron vincularse a un equipo por Serie o N° Inventario.');
+    if(ignorados) avisos.push(ignorados+' valor(es) no válidos fueron ignorados en las columnas P/R del registro.');
+  }
+
+  /* ---- Paso 4 · Regla Oficial/Borrador al recargar la planilla ---- */
+  const conResultado = new Set(registros.filter(g=>g.resultado).map(g=>g.equipoKey+'|'+g.mes));
+  let oficializados = 0;
+  state.manuales.forEach(m=>{
+    if(m.tipoRegistro==='Borrador' && m.fecha && m.fecha.startsWith('2026')){
+      const mes = parseInt(m.fecha.slice(5,7),10)-1;
+      if(conResultado.has(m.equipoKey+'|'+mes)){ m.tipoRegistro='Oficial'; m.oficializado=hoyISO(); oficializados++; }
+    }
+  });
+
+  state.equipos = equipos;
+  state.registros = registros;
+  state.meta = {
+    archivo: nombreArchivo, fechaCarga: new Date().toLocaleString('es-CL'),
+    hojaPMP: nomPMP, hojaReg: nomReg||'—', avisos, oficializados,
+    ejemplo:false
+  };
+  filtros = {}; orden = {k:null,dir:1}; busqueda=''; pagina=0; cacheFiltradas=null;
+  guardar();
+}
+
+async function cargarArchivo(file){
+  if(typeof XLSX==='undefined'){ toast('Librería XLSX no disponible.'); return; }
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, {type:'array'});
+    procesarWorkbook(wb, file.name);
+    renderTodo();
+    mostrarVista('carga');
+    toast('✅ Planilla cargada: '+state.equipos.length+' equipos.');
+  }catch(err){
+    console.error(err);
+    $('#card-resumen').style.display='none';
+    alert('Error al cargar el archivo:\n'+err.message);
+  }
+}
+
+/* =====================================================================
+   DATOS DE EJEMPLO (para probar la aplicación sin la planilla real)
+   ===================================================================== */
+function cargarEjemplo(){
+  const D = [
+    /* id carpeta inventario equipo servicio unidad ubicacion procedencia marca modelo serie anio vida clasif enu  prog{mes:cod}  reg[{mes,p,r}] obs */
+    ['1','C-101','00039','Monitor Multiparámetro','UCI Adulto','Cuidados Intensivos','Sala 1 - Cama 3','Compra Directa','Mindray','uMEC12','VS-88412','2019','3','Crítico','', {2:'X'}, [{m:2,p:'X',r:'Si'}], ''],
+    ['2','C-102','01205','Ventilador Mecánico','UCI Adulto','Cuidados Intensivos','Sala 2','Licitación','Dräger','Evita V300','0','2017','1','Crítico','', {0:'X'}, [{m:0,p:'X',r:'C2'}], 'Equipo en servicio técnico desde enero'],
+    ['3','C-118','00877','Bomba de Infusión','Medicina','Medicina Interna','Estación Enfermería','Donación','B. Braun','Infusomat Space','BI-00077','2021','6','Relevante','', {1:'X',2:'R'}, [{m:1,p:'X',r:'C5'},{m:2,p:'R',r:'Si'}], 'Reprogramada por alta carga laboral SEC'],
+    ['4','C-090','00412','Desfibrilador','Urgencia','Reanimación','Box Crítico 1','Compra Directa','Zoll','R Series','DF-2210','2016','0','Crítico','', {0:'RA'}, [{m:0,p:'RA',r:'Si-RA'}], 'Mantención pendiente del año anterior'],
+    ['5','C-076','00301','Máquina de Anestesia','Pabellón','Pabellón Central','Quirófano 2','Licitación','GE Healthcare','Aisys CS2','MA-118','2014','0','Crítico','', {3:'X'}, [{m:3,p:'X',r:'FS'}], 'Fuera de servicio: falla en vaporizador'],
+    ['6','C-204','00558','Electrocardiógrafo','Cardiología','Procedimientos','Sala ECG','Compra Directa','Philips','PageWriter TC30','EC-555','2020','5','Relevante','', {4:'X'}, [{m:4,p:'X',r:'NU'}], 'No ubicado en ronda de mayo'],
+    ['7','C-310','00090','Autoclave','Esterilización','Central Esterilización','Área Limpia','Licitación','Tuttnauer','3870 EA','AU-90','2026','10','Apoyo','', {5:'PM'}, [{m:5,p:'PM',r:'Si'}], 'Puesta en marcha equipo nuevo'],
+    ['8','C-055','00264','Lámpara Quirúrgica','Pabellón','Pabellón Central','Quirófano 4','Compra Directa','Stryker','Visum LED','LQ-3001','2008','0','Apoyo','Baja', {1:'X'}, [{m:1,p:'X',r:'Baja'}], 'Equipo dado de baja, obsolescencia'],
+    ['9','C-411','00733','Ecógrafo','Imagenología','Ecotomografía','Sala 3','Licitación','Samsung','HS50','EG-7401','2022','7','Relevante','', {6:'X'}, [], ''],
+    ['10','C-512','00128','Incubadora','Neonatología','UCI Neonatal','Sala 1','Donación','Atom','Incu i','IN-0098','2018','2','Crítico','', {7:'X'}, [], '']
+  ];
+  const equipos=[], registros=[];
+  const mapS=new Map(), mapI=new Map();
+  D.forEach(d=>{
+    const e = {fila:equipos.length+8, id:d[0],carpeta:d[1],inventario:d[2],equipo:d[3],servicio:d[4],unidad:d[5],
+      ubicacion:d[6],procedencia:d[7],marca:d[8],modelo:d[9],serie:d[10],anio:d[11],vidaUtil:d[12],
+      clasificacion:d[13],enu:d[14], prog:d[15], regObs:d[17]||''};
+    e.key = valorUtil(e.serie) ? 'S:'+e.serie.toUpperCase() : 'I:'+e.inventario.toUpperCase();
+    equipos.push(e);
+    d[16].forEach(g=>registros.push({equipoKey:e.key, mes:g.m, programa:g.p, resultado:g.r, obs:d[17]||''}));
+  });
+  /* Regla Oficial/Borrador también aplica a la carga de ejemplo */
+  const conRes = new Set(registros.filter(g=>g.resultado).map(g=>g.equipoKey+'|'+g.mes));
+  let ofi=0;
+  state.manuales.forEach(m=>{
+    if(m.tipoRegistro==='Borrador' && m.fecha && m.fecha.startsWith('2026')){
+      const mes=parseInt(m.fecha.slice(5,7),10)-1;
+      if(conRes.has(m.equipoKey+'|'+mes)){ m.tipoRegistro='Oficial'; m.oficializado=hoyISO(); ofi++; }
+    }
+  });
+  state.equipos=equipos; state.registros=registros;
+  state.meta={archivo:'Datos de ejemplo (demostración)', fechaCarga:new Date().toLocaleString('es-CL'),
+    hojaPMP:'PMP_2026', hojaReg:'Registro_MP-2026', avisos:[], oficializados:ofi, ejemplo:true};
+  filtros={}; orden={k:null,dir:1}; busqueda=''; pagina=0; cacheFiltradas=null;
+  guardar(); renderTodo(); toast('✅ Datos de ejemplo cargados ('+equipos.length+' equipos).');
+}
+
+/* =====================================================================
+   NAVEGACIÓN Y RENDER GENERAL
+   ===================================================================== */
+function mostrarVista(id){
+  $$('.vista').forEach(v=>v.classList.remove('activa'));
+  $('#vista-'+id).classList.add('activa');
+  $$('#nav-principal button').forEach(b=>b.classList.toggle('activa', b.dataset.vista===id));
+  cerrarPopover();
+  if(id==='equipos') renderTabla();
+  if(id==='pendientes') renderPendientes();
+  window.scrollTo({top:0});
+}
+function renderTodo(){
+  renderResumen(); renderTabla(); renderPendientes(); renderBadges();
+  if(detalleKey) renderDetalle(detalleKey);
+}
+function renderBadges(){
+  const bE=$('#badge-equipos');
+  bE.style.display = state.equipos.length?'':'none';
+  bE.textContent = state.equipos.length;
+  const abiertos = state.pendientes.filter(p=>p.estado!=='Completado').length;
+  const bP=$('#badge-pend');
+  bP.style.display = abiertos?'':'none';
+  bP.textContent = abiertos;
+}
+
+/* ---------- Resumen de carga ---------- */
+function renderResumen(){
+  const card=$('#card-resumen');
+  if(!state.meta){ card.style.display='none'; return; }
+  card.style.display='';
+  $('#resumen-meta').innerHTML = `Archivo: <strong>${esc(state.meta.archivo)}</strong> · Cargado: ${esc(state.meta.fechaCarga)} · Hojas: <strong>${esc(state.meta.hojaPMP)}</strong> / <strong>${esc(state.meta.hojaReg)}</strong>`;
+  const progTotal = state.equipos.reduce((a,e)=>a+Object.keys(e.prog||{}).length,0);
+  const conRes = state.registros.filter(r=>r.resultado);
+  const realizadas = conRes.filter(r=>r.resultado==='Si'||r.resultado==='Si-RA').length;
+  const reprog = conRes.filter(r=>/^C[1-8]$/.test(r.resultado)).length;
+  const kpis = [
+    [state.equipos.length,'Equipos cargados'],
+    [progTotal,'Mantenciones programadas 2026'],
+    [conRes.length,'Resultados registrados'],
+    [realizadas,'Realizadas (Si / Si-RA)'],
+    [reprog,'Reprogramadas (C1–C8)'],
+    [state.meta.oficializados,'Borradores actualizados a Oficial'],
+    [state.manuales.length,'Registros creados en la app'],
+    [state.pendientes.filter(p=>p.estado!=='Completado').length,'Pendientes abiertos']
+  ];
+  $('#resumen-kpis').innerHTML = kpis.map(k=>`<div class="kpi"><b>${k[0]}</b><span>${k[1]}</span></div>`).join('');
+  $('#resumen-avisos').innerHTML =
+    (state.meta.ejemplo?'<div class="aviso ambar">⚠️ Estás trabajando con <strong>datos de ejemplo</strong>. Carga la planilla real para reemplazarlos.</div>':'') +
+    (state.meta.oficializados?`<div class="aviso verde">✔ ${state.meta.oficializados} registro(s) en Borrador se actualizaron a <strong>Oficial</strong> porque la mantención aparece en la planilla recargada.</div>`:'') +
+    (state.meta.avisos||[]).map(a=>`<div class="aviso ambar">⚠️ ${esc(a)}</div>`).join('');
+}
+
+/* =====================================================================
+   PASO 2 — VISTA DE EQUIPOS (filtros tipo Excel, orden, paginación)
+   ===================================================================== */
+function pasaBusqueda(e){
+  if(!busqueda) return true;
+  const b = sinAcentos(busqueda).toLowerCase();
+  return CAMPOS.some(c => sinAcentos(e[c.k]||'').toLowerCase().includes(b));
+}
+function filasFiltradas(excluir){
+  return state.equipos.filter(e =>
+    pasaBusqueda(e) &&
+    CAMPOS.every(c => c.k===excluir || !filtros[c.k] || filtros[c.k].has(e[c.k]||''))
+  );
+}
+function filasVisibles(){
+  if(cacheFiltradas) return cacheFiltradas;
+  let filas = filasFiltradas(null);
+  if(orden.k){
+    const k=orden.k, dir=orden.dir;
+    filas = filas.slice().sort((a,b)=>{
+      const va=a[k]||'', vb=b[k]||'';
+      if(va==='' && vb!=='') return 1;
+      if(vb==='' && va!=='') return -1;
+      return dir * String(va).localeCompare(String(vb),'es',{numeric:true,sensitivity:'base'});
+    });
+  }
+  cacheFiltradas = filas;
+  return filas;
+}
+function invalidar(){ cacheFiltradas=null; }
+
+function renderTabla(){
+  const thead=$('#thead-equipos');
+  thead.innerHTML = CAMPOS.map(c=>{
+    const filtrado = !!filtros[c.k];
+    const flecha = orden.k===c.k ? (orden.dir===1?' ▲':' ▼') : '';
+    return `<th><div class="th-int"><span class="tit">${esc(c.l)}${flecha}</span>
+      <button class="btn-filtro ${filtrado?'activo':''}" data-col="${c.k}" title="Filtrar / ordenar">${filtrado?'⏷✓':'⏷'}</button></div></th>`;
+  }).join('');
+
+  const filas = filasVisibles();
+  const selPag = $('#sel-pagina').value;
+  const tam = selPag==='all' ? filas.length||1 : parseInt(selPag,10);
+  const totalPag = Math.max(1, Math.ceil(filas.length/tam));
+  if(pagina>=totalPag) pagina=totalPag-1;
+  const ini = pagina*tam;
+  const visibles = filas.slice(ini, ini+tam);
+
+  const tbody=$('#tbody-equipos');
+  if(!state.equipos.length){
+    tbody.innerHTML = `<tr><td colspan="${CAMPOS.length}"><div class="vacio">No hay equipos cargados. Ve a <a href="#" onclick="mostrarVista('carga');return false">Carga de Datos</a>.</div></td></tr>`;
+  } else if(!filas.length){
+    tbody.innerHTML = `<tr><td colspan="${CAMPOS.length}"><div class="vacio">Ningún equipo coincide con los filtros aplicados.</div></td></tr>`;
+  } else {
+    tbody.innerHTML = visibles.map(e =>
+      `<tr data-key="${esc(e.key)}">` + CAMPOS.map(c=>`<td title="${esc(e[c.k])}">${esc(e[c.k])}</td>`).join('') + '</tr>'
+    ).join('');
+  }
+  $('#contador-filas').textContent = `Mostrando ${filas.length} de ${state.equipos.length} equipos`;
+  $('#pag-info').textContent = `Página ${pagina+1} de ${totalPag}`;
+  $('#pag-prev').disabled = pagina<=0;
+  $('#pag-next').disabled = pagina>=totalPag-1;
+  $('#btn-limpiar-filtros').style.display = (Object.keys(filtros).length||busqueda||orden.k) ? '' : 'none';
+}
+
+/* ---------- Popover de filtro por columna ---------- */
+let popCol=null;
+function abrirPopover(colKey, ancla){
+  const pop=$('#filtro-pop');
+  popCol=colKey;
+  const campo=CAMPOS.find(c=>c.k===colKey);
+  /* Valores disponibles considerando los filtros de las demás columnas (comportamiento Excel) */
+  const base = filasFiltradas(colKey);
+  const conteo=new Map();
+  base.forEach(e=>{ const v=e[colKey]||''; conteo.set(v,(conteo.get(v)||0)+1); });
+  let valores=[...conteo.keys()].sort((a,b)=>String(a).localeCompare(String(b),'es',{numeric:true,sensitivity:'base'}));
+  const LIM=600, recortado=valores.length>LIM;
+  if(recortado) valores=valores.slice(0,LIM);
+  const sel = filtros[colKey];
+
+  pop.innerHTML = `
+    <div class="fp-cab">Filtro: ${esc(campo.l)}</div>
+    <div class="fp-sec">
+      <button data-orden="1">Ordenar A → Z</button>
+      <button data-orden="-1">Ordenar Z → A</button>
+    </div>
+    <input class="fp-buscar" type="text" placeholder="Buscar valores…">
+    <div class="fp-lista">
+      <label><input type="checkbox" class="fp-todos" ${!sel?'checked':''}> <strong>(Seleccionar todo)</strong></label>
+      ${valores.map(v=>`<label data-v="${esc(v)}"><input type="checkbox" class="fp-val" value="${esc(v)}" ${(!sel||sel.has(v))?'checked':''}> <span>${v===''?'<em>(Vacías)</em>':esc(v)}</span><span class="cnt">${conteo.get(v)}</span></label>`).join('')}
+      ${recortado?`<div class="vacio" style="padding:8px">Se muestran los primeros ${LIM} valores; usa la búsqueda para acotar.</div>`:''}
+    </div>
+    <div class="fp-pie">
+      <button class="limpiar">Limpiar filtro</button>
+      <button class="ok">Aplicar</button>
+    </div>`;
+
+  const rect=ancla.getBoundingClientRect();
+  pop.style.display='block';
+  const ancho=270;
+  let x=rect.left+window.scrollX;
+  if(x+ancho > window.scrollX+document.documentElement.clientWidth-10) x=window.scrollX+document.documentElement.clientWidth-ancho-10;
+  pop.style.left=x+'px';
+  pop.style.top=(rect.bottom+window.scrollY+6)+'px';
+
+  pop.querySelector('.fp-buscar').addEventListener('input', ev=>{
+    const b=sinAcentos(ev.target.value).toLowerCase();
+    pop.querySelectorAll('.fp-lista label[data-v]').forEach(l=>{
+      l.style.display = sinAcentos(l.dataset.v).toLowerCase().includes(b)?'':'none';
+    });
+  });
+  pop.querySelector('.fp-todos').addEventListener('change', ev=>{
+    pop.querySelectorAll('.fp-val').forEach(ch=>{ if(ch.closest('label').style.display!=='none') ch.checked=ev.target.checked; });
+  });
+  pop.querySelectorAll('[data-orden]').forEach(b=>b.addEventListener('click',()=>{
+    orden = (orden.k===colKey && orden.dir===+b.dataset.orden) ? {k:null,dir:1} : {k:colKey, dir:+b.dataset.orden};
+    invalidar(); renderTabla(); cerrarPopover();
+  }));
+  pop.querySelector('.limpiar').addEventListener('click',()=>{
+    delete filtros[colKey]; pagina=0; invalidar(); renderTabla(); cerrarPopover();
+  });
+  pop.querySelector('.ok').addEventListener('click',()=>{
+    const marcados=[...pop.querySelectorAll('.fp-val')].filter(ch=>ch.checked).map(ch=>ch.value);
+    const todos=pop.querySelectorAll('.fp-val').length;
+    if(marcados.length===todos && !recortado) delete filtros[colKey];
+    else filtros[colKey]=new Set(marcados);
+    pagina=0; invalidar(); renderTabla(); cerrarPopover();
+  });
+}
+function cerrarPopover(){ $('#filtro-pop').style.display='none'; popCol=null; }
+document.addEventListener('click', ev=>{
+  const pop=$('#filtro-pop');
+  if(pop.style.display==='block' && !pop.contains(ev.target) && !ev.target.closest('.btn-filtro')) cerrarPopover();
+});
+document.addEventListener('keydown', ev=>{ if(ev.key==='Escape'){ cerrarPopover(); cerrarModal('modal-mp'); cerrarModal('modal-pend'); } });
+
+/* ---------- Exportación (conserva ceros a la izquierda: celdas de texto) ---------- */
+function exportarEquipos(){
+  if(typeof XLSX==='undefined'){ toast('Librería XLSX no disponible.'); return; }
+  const filas = filasVisibles();
+  if(!filas.length){ toast('No hay filas para exportar.'); return; }
+  const aoa = [CAMPOS.map(c=>c.l), ...filas.map(e=>CAMPOS.map(c=>String(e[c.k]||'')))];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  /* Forzar tipo texto en todas las celdas para conservar "00039" */
+  Object.keys(ws).forEach(addr=>{ if(addr[0]!=='!'){ ws[addr].t='s'; ws[addr].v=String(ws[addr].v); delete ws[addr].w; } });
+  ws['!cols'] = CAMPOS.map(c=>({wch: Math.max(c.l.length+2, 12)}));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Equipos');
+  XLSX.writeFile(wb, 'Equipos_GMP2026_'+hoyISO()+'.xlsx');
+  toast('⬇ Exportados '+filas.length+' equipos.');
+}
+
+/* =====================================================================
+   PASO 7 — VISTA DE DETALLE DEL EQUIPO
+   ===================================================================== */
+function equipoPorKey(k){ return state.equipos.find(e=>e.key===k); }
+function abrirDetalle(key){ detalleKey=key; renderDetalle(key); mostrarVista('detalle'); }
+
+function renderDetalle(key){
+  const e=equipoPorKey(key);
+  if(!e){ mostrarVista('equipos'); return; }
+  $('#det-titulo').textContent = e.equipo || '(Equipo sin nombre)';
+  const manualesEq = state.manuales.filter(m=>m.equipoKey===key).sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+  const ultimo = manualesEq[0];
+  const chips=[];
+  if(e.servicio) chips.push(`<span class="chip azul">${esc(e.servicio)}</span>`);
+  if(e.clasificacion) chips.push(`<span class="chip morado">${esc(e.clasificacion)}</span>`);
+  if(valorUtil(e.enu)) chips.push(`<span class="chip negro">ENU/Baja: ${esc(e.enu)}</span>`);
+  if(ultimo) chips.push(ultimo.estadoEquipo==='Operativo'
+    ? '<span class="chip verde">✔ Operativo</span>'
+    : '<span class="chip rojo">✖ No Operativo</span>');
+  chips.push(`<span class="chip gris">Identificador: ${esc(key)}</span>`);
+  $('#det-chips').innerHTML = chips.join('');
+  $('#det-campos').innerHTML = CAMPOS.map(c=>`<div class="campo-box"><label>${esc(c.l)}</label><div>${esc(e[c.k])||'—'}</div></div>`).join('');
+
+  /* Programación + resultados por mes */
+  const regsEq = state.registros.filter(r=>r.equipoKey===key);
+  $('#det-meses').innerHTML = MESES.map((nom,m)=>{
+    const prog = e.prog ? e.prog[m] : '';
+    const regs = regsEq.filter(r=>r.mes===m);
+    const manuales = manualesEq.filter(x=>x.fecha && x.fecha.startsWith('2026') && parseInt(x.fecha.slice(5,7),10)-1===m);
+    const partes=[];
+    if(prog) partes.push('<div>'+chipPrograma(prog)+' <small style="color:var(--gris-4)">programación</small></div>');
+    regs.forEach(r=>{
+      partes.push('<div>'+ (r.programa?chipPrograma(r.programa)+' ':'') + chipResultado(r.resultado) +'</div>');
+    });
+    manuales.forEach(x=>{
+      partes.push('<div title="Registro creado en la aplicación">'+chipResultado(x.resultado)+` <small style="color:var(--gris-4)">${x.tipoRegistro==='Borrador'?'borrador':'app'}</small></div>`);
+    });
+    return `<div class="mes-box ${prog||regs.length?'con-prog':''}"><h4>${nom}</h4><div class="codigos">${partes.join('')||'<small style="color:var(--gris-3)">—</small>'}</div></div>`;
+  }).join('');
+  $('#det-obs-planilla').innerHTML = e.regObs ? `<div class="aviso" style="margin-top:14px"><strong>Observación (planilla, col. AR):</strong> ${esc(e.regObs)}</div>` : '';
+
+  /* Historial de mantenciones (planilla + aplicación) */
+  const filasH=[];
+  regsEq.slice().sort((a,b)=>a.mes-b.mes).forEach(r=>{
+    if(!r.programa && !r.resultado) return;
+    filasH.push(`<tr>
+      <td>${MESES[r.mes]} 2026</td>
+      <td>${chipPrograma(r.programa)||'—'}</td>
+      <td>${chipResultado(r.resultado)||'—'}</td>
+      <td style="max-width:330px">${esc(r.resultado?RESULTADOS[r.resultado]:(r.programa?PROG_CODES[r.programa]:''))}</td>
+      <td>—</td>
+      <td><span class="chip verde">Oficial</span></td>
+      <td><span class="chip gris">Planilla</span></td>
+      <td></td></tr>`);
+  });
+  manualesEq.slice().reverse().forEach(m=>{
+    filasH.push(`<tr>
+      <td>${fmtFecha(m.fecha)}</td>
+      <td>${chipPrograma(m.programacion)||'—'}</td>
+      <td>${chipResultado(m.resultado)||'—'}</td>
+      <td style="max-width:330px">${esc(RESULTADOS[m.resultado]||'')}${m.observaciones?'<br><small style="color:var(--gris-4)">'+esc(m.observaciones)+'</small>':''}${m.gestionPendiente?'<br><span class="chip ambar">Gestión pendiente</span>':''}</td>
+      <td>${esc(m.ejecutor)}</td>
+      <td>${m.tipoRegistro==='Oficial'?'<span class="chip verde">Oficial</span>':'<span class="chip ambar">Borrador</span>'}</td>
+      <td><span class="chip azul">App</span> ${m.estadoEquipo==='No Operativo'?'<span class="chip rojo">No Op.</span>':''}</td>
+      <td style="white-space:nowrap"><button class="btn mini" data-editar-mp="${m.id}">✎</button> <button class="btn mini peligro" data-borrar-mp="${m.id}">🗑</button></td></tr>`);
+  });
+  $('#det-historial').innerHTML = filasH.length
+    ? `<table class="lista"><tr><th>Mes / Fecha</th><th>Programa</th><th>Resultado</th><th>Significado / Observaciones</th><th>Ejecutor</th><th>Registro</th><th>Origen</th><th></th></tr>${filasH.join('')}</table>`
+    : '<div class="vacio">Sin mantenciones registradas para este equipo.</div>';
+
+  /* Pendientes del equipo */
+  const pendEq = state.pendientes.filter(p=>p.equipoKey===key);
+  $('#det-pendientes').innerHTML = pendEq.length ? tablaPendientes(pendEq) : '<div class="vacio">Sin pendientes para este equipo. Usa el botón «📋 Pendientes» para crear uno.</div>';
+}
+
+/* =====================================================================
+   PASO 8 — FORMULARIO DE MANTENIMIENTO PREVENTIVO
+   ===================================================================== */
+let mpEditando=null;
+function setToggle(grupoId, valor, clase){
+  $$('#'+grupoId+' button').forEach(b=>{
+    b.className='';
+    if(b.dataset.v===valor){
+      b.className = (clase && clase[valor]) ? clase[valor] : 'sel-azul';
+    }
+  });
+}
+const CLASES_ESTADO={'Operativo':'sel-verde','No Operativo':'sel-rojo'};
+const CLASES_TIPO={'Oficial':'sel-verde','Borrador':'sel-ambar'};
+function valToggle(grupoId){ const b=$$('#'+grupoId+' button').find(x=>x.className); return b?b.dataset.v:null; }
+
+function abrirModalMP(equipoKey, registro){
+  const e=equipoPorKey(equipoKey); if(!e) return;
+  mpEditando = registro||null;
+  $('#mp-equipo-nombre').textContent = `${e.equipo} · Serie ${e.serie||'—'} · Inv. ${e.inventario||'—'}`;
+  $('#mp-fecha').value = registro?registro.fecha:hoyISO();
+  $('#mp-programacion').value = registro?registro.programacion:'';
+  $('#mp-ejecutor').value = registro?registro.ejecutor:'';
+  $('#mp-resultado').value = registro?registro.resultado:'';
+  $('#mp-observaciones').value = registro?registro.observaciones:'';
+  setToggle('mp-estado', registro?registro.estadoEquipo:'Operativo', CLASES_ESTADO);
+  setToggle('mp-tipo', registro?registro.tipoRegistro:'Borrador', CLASES_TIPO);
+  $('#mp-gestion').checked = registro?!!registro.gestionPendiente:false;
+  $('#mp-gestion-txt').textContent = $('#mp-gestion').checked?'Sí':'No';
+  actualizarHintMP();
+  $('#modal-mp').dataset.equipo = equipoKey;
+  $('#modal-mp').classList.add('abierto');
+}
+function actualizarHintMP(){
+  const res=$('#mp-resultado').value, fecha=$('#mp-fecha').value||hoyISO();
+  const h=$('#mp-hint');
+  if(REPRO_SIN_FECHA.includes(res)){
+    h.innerHTML=`<div class="aviso ambar"><strong>${res} — ${esc(CAUSALES[res])}.</strong><br>No se fija nueva fecha; la mantención se registra en el mes real de ejecución una vez que el equipo sea reintegrado (Paso 6).</div>`;
+  } else if(REPRO_30DIAS.includes(res)){
+    h.innerHTML=`<div class="aviso ambar"><strong>${res} — ${esc(CAUSALES[res])}.</strong><br>Debe reprogramarse dentro de los <strong>30 días siguientes</strong> (a más tardar el <strong>${fmtFecha(sumarDias(fecha,30))}</strong>). El mes original conserva <strong>X</strong> en la columna P y la causal en la columna R; el mes de destino lleva <strong>R</strong> (Paso 6). Se sugiere dejar una gestión pendiente de reprogramación.</div>`;
+    $('#mp-gestion').checked=true; $('#mp-gestion-txt').textContent='Sí';
+  } else if(res==='FS'){
+    h.innerHTML='<div class="aviso rojo"><strong>FS — Fuera de Servicio.</strong> Se sugiere marcar el estado del equipo como «No Operativo».</div>';
+    setToggle('mp-estado','No Operativo',CLASES_ESTADO);
+  } else if(res==='Baja'){
+    h.innerHTML='<div class="aviso rojo"><strong>Baja — Equipo Dado de Baja.</strong></div>';
+  } else h.innerHTML='';
+}
+function guardarMP(){
+  const equipoKey=$('#modal-mp').dataset.equipo;
+  const fecha=$('#mp-fecha').value, prog=$('#mp-programacion').value,
+        ejec=$('#mp-ejecutor').value, res=$('#mp-resultado').value;
+  if(!fecha||!prog||!ejec||!res){ toast('⚠️ Completa los campos obligatorios: fecha, programación, ejecutor y resultado.'); return; }
+  const datos={
+    equipoKey, fecha, programacion:prog, ejecutor:ejec, resultado:res,
+    observaciones:$('#mp-observaciones').value.trim(),
+    estadoEquipo:valToggle('mp-estado')||'Operativo',
+    gestionPendiente:$('#mp-gestion').checked,
+    tipoRegistro:valToggle('mp-tipo')||'Borrador'
+  };
+  if(mpEditando){ Object.assign(mpEditando, datos, {actualizado:hoyISO()}); toast('✅ Mantención actualizada.'); }
+  else { state.manuales.push(Object.assign({id:uid(), creado:hoyISO()}, datos)); toast('✅ Mantención guardada ('+datos.tipoRegistro+').'); }
+  guardar(); cerrarModal('modal-mp'); renderTodo();
+  /* Si quedó una gestión pendiente, abrir de inmediato el formulario de Pendientes */
+  if(datos.gestionPendiente && !mpEditando){
+    const prefTipo = /^C[1-8]$/.test(res) ? 'Reprogramación Mantención Preventiva' : '';
+    abrirModalPendiente(equipoKey, null, {tipo:prefTipo, descripcion:`Asociado a MP del ${fmtFecha(fecha)} (resultado ${res}).`});
+  }
+  mpEditando=null;
+}
+
+/* =====================================================================
+   PASO 9 — FORMULARIO DE PENDIENTES
+   ===================================================================== */
+let peEditando=null, peTareas=[], peGestiones=[];
+function abrirModalPendiente(equipoKey, pendiente, prellenar){
+  const e=equipoPorKey(equipoKey);
+  peEditando=pendiente||null;
+  peTareas = pendiente ? pendiente.tareas.map(t=>({...t})) : [];
+  peGestiones = pendiente ? pendiente.gestiones.map(g=>({...g})) : [];
+  $('#pe-equipo-nombre').textContent = e ? `${e.equipo} · Serie ${e.serie||'—'} · Inv. ${e.inventario||'—'}` : equipoKey;
+  $('#pe-fecha').value = pendiente?pendiente.fechaCompromiso:hoyISO();
+  $('#pe-tipo').value = pendiente?pendiente.tipo:(prellenar&&prellenar.tipo)||TIPOS_PENDIENTE[0];
+  $('#pe-descripcion').value = pendiente?pendiente.descripcion:(prellenar&&prellenar.descripcion)||'';
+  $('#pe-resp-adm').value = pendiente?pendiente.respAdmin:RESP_ADM_DEFECTO;
+  $('#pe-resp-eje').value = pendiente?pendiente.respEjec:'';
+  $('#pe-tarea-nueva').value=''; $('#pe-gestion-nueva').value='';
+  $('#pe-estado-grupo').style.display = pendiente?'':'none';
+  if(pendiente) setToggle('pe-estado', pendiente.estado||'Abierto', {'Abierto':'sel-azul','Completado':'sel-verde'});
+  $('#pe-eliminar').style.display = pendiente?'':'none';
+  renderPeTareas(); renderPeLog();
+  $('#modal-pend').dataset.equipo=equipoKey;
+  $('#modal-pend').classList.add('abierto');
+}
+function renderPeTareas(){
+  $('#pe-tareas').innerHTML = peTareas.length ? peTareas.map((t,i)=>`
+    <div class="tarea ${t.hecha?'hecha':''}">
+      <input type="checkbox" data-tarea="${i}" ${t.hecha?'checked':''}>
+      <span>${esc(t.texto)}</span>
+      <button class="quitar" data-quitar-tarea="${i}" title="Quitar tarea">✕</button>
+    </div>`).join('') : '<small style="color:var(--gris-4)">Sin tareas. Agrega las tareas asociadas al pendiente.</small>';
+}
+function renderPeLog(){
+  $('#pe-log').innerHTML = peGestiones.length ? peGestiones.map(g=>`
+    <div class="log-item"><time>${esc(g.fecha)}</time>${esc(g.texto)}</div>`).join('')
+    : '<small style="color:var(--gris-4)">Sin actualizaciones registradas.</small>';
+}
+function agregarTarea(){
+  const inp=$('#pe-tarea-nueva'); const t=inp.value.trim();
+  if(!t) return;
+  peTareas.push({texto:t, hecha:false}); inp.value=''; inp.focus(); renderPeTareas();
+}
+function agregarGestion(){
+  const inp=$('#pe-gestion-nueva'); const t=inp.value.trim();
+  if(!t) return;
+  peGestiones.push({fecha:new Date().toLocaleString('es-CL'), texto:t}); inp.value=''; renderPeLog();
+}
+function guardarPendiente(){
+  const equipoKey=$('#modal-pend').dataset.equipo;
+  const fecha=$('#pe-fecha').value, tipo=$('#pe-tipo').value,
+        adm=$('#pe-resp-adm').value, eje=$('#pe-resp-eje').value;
+  if(!fecha||!tipo||!adm||!eje){ toast('⚠️ Completa fecha de compromiso, tipo y ambos responsables.'); return; }
+  const datos={
+    equipoKey, fechaCompromiso:fecha, tipo,
+    descripcion:$('#pe-descripcion').value.trim(),
+    tareas:peTareas, respAdmin:adm, respEjec:eje, gestiones:peGestiones,
+    estado: peEditando ? (valToggle('pe-estado')||'Abierto') : 'Abierto'
+  };
+  if(peEditando){ Object.assign(peEditando, datos, {actualizado:hoyISO()}); toast('✅ Pendiente actualizado.'); }
+  else { state.pendientes.push(Object.assign({id:uid(), creado:hoyISO()}, datos)); toast('✅ Pendiente creado.'); }
+  guardar(); cerrarModal('modal-pend'); peEditando=null; renderTodo();
+}
+function eliminarPendiente(){
+  if(!peEditando) return;
+  if(!confirm('¿Eliminar este pendiente y toda su gestión asociada?')) return;
+  state.pendientes = state.pendientes.filter(p=>p.id!==peEditando.id);
+  guardar(); cerrarModal('modal-pend'); peEditando=null; renderTodo(); toast('🗑 Pendiente eliminado.');
+}
+
+/* ---------- Vista global de pendientes ---------- */
+function tablaPendientes(lista){
+  const hoy=hoyISO();
+  const filas=lista.slice().sort((a,b)=>(a.fechaCompromiso||'').localeCompare(b.fechaCompromiso||'')).map(p=>{
+    const e=equipoPorKey(p.equipoKey);
+    const vencido = p.estado!=='Completado' && p.fechaCompromiso && p.fechaCompromiso<hoy;
+    const hechas=p.tareas.filter(t=>t.hecha).length;
+    const ultima=p.gestiones.length?p.gestiones[p.gestiones.length-1]:null;
+    return `<tr class="click" data-pendiente="${p.id}">
+      <td><strong>${esc(e?e.equipo:p.equipoKey)}</strong><br><small style="color:var(--gris-4)">${esc(e?('Serie '+(e.serie||'—')+' · '+(e.servicio||'')):'')}</small></td>
+      <td>${esc(p.tipo)}${p.descripcion?'<br><small style="color:var(--gris-4)">'+esc(p.descripcion)+'</small>':''}</td>
+      <td>${fmtFecha(p.fechaCompromiso)}${vencido?'<br><span class="chip rojo">Vencido</span>':''}</td>
+      <td>${p.tareas.length?hechas+' / '+p.tareas.length:'—'}</td>
+      <td>${esc(p.respAdmin)}</td>
+      <td>${esc(p.respEjec)}</td>
+      <td style="max-width:240px">${ultima?'<small><time style="color:var(--gris-4)">'+esc(ultima.fecha)+'</time><br>'+esc(ultima.texto)+'</small>':'—'}</td>
+      <td>${p.estado==='Completado'?'<span class="chip verde">Completado</span>':'<span class="chip azul">Abierto</span>'}</td>
+    </tr>`;
+  }).join('');
+  return `<div style="overflow:auto"><table class="lista">
+    <tr><th>Equipo</th><th>Tipo de pendiente</th><th>F. compromiso</th><th>Tareas</th><th>Resp. Administrativo</th><th>Resp. Ejecutivo</th><th>Última gestión</th><th>Estado</th></tr>
+    ${filas}</table></div>`;
+}
+function renderPendientes(){
+  const hoy=hoyISO();
+  let lista=state.pendientes;
+  if(filtroPend==='abiertos') lista=lista.filter(p=>p.estado!=='Completado');
+  else if(filtroPend==='vencidos') lista=lista.filter(p=>p.estado!=='Completado' && p.fechaCompromiso && p.fechaCompromiso<hoy);
+  else if(filtroPend==='completados') lista=lista.filter(p=>p.estado==='Completado');
+  $$('#filtros-pend button').forEach(b=>{
+    const sel=b.dataset.fp===filtroPend;
+    b.classList.toggle('primario', sel);
+  });
+  $('#lista-pendientes').innerHTML = lista.length ? tablaPendientes(lista)
+    : '<div class="vacio">No hay pendientes en esta categoría. Los pendientes se crean desde la vista de detalle de cada equipo (botón «📋 Pendientes»).</div>';
+  renderBadges();
+}
+
+/* =====================================================================
+   MODALES / EVENTOS GLOBALES
+   ===================================================================== */
+function cerrarModal(id){ $('#'+id).classList.remove('abierto'); }
+$$('[data-cerrar]').forEach(b=>b.addEventListener('click',()=>cerrarModal(b.dataset.cerrar)));
+$$('.modal-fondo').forEach(m=>m.addEventListener('mousedown',ev=>{ if(ev.target===m) cerrarModal(m.id); }));
+
+function poblarSelects(){
+  const opEj = EJECUTORES.map(x=>`<option>${esc(x)}</option>`).join('');
+  $('#mp-ejecutor').innerHTML = '<option value="">— Seleccionar —</option>'+opEj;
+  $('#pe-resp-adm').innerHTML = opEj;
+  $('#pe-resp-eje').innerHTML = '<option value="">— Seleccionar —</option>'+opEj;
+  $('#pe-resp-adm').value = RESP_ADM_DEFECTO;
+  $('#mp-resultado').innerHTML = '<option value="">— Seleccionar —</option>'+
+    ORDEN_RESULTADOS.map(c=>`<option value="${c}">${c} — ${esc(RESULTADOS[c].length>60?RESULTADOS[c].slice(0,60)+'…':RESULTADOS[c])}</option>`).join('');
+  $('#pe-tipo').innerHTML = TIPOS_PENDIENTE.map(t=>`<option>${esc(t)}</option>`).join('');
+  $('#tabla-causales').insertAdjacentHTML('beforeend',
+    Object.entries(CAUSALES).map(([c,d])=>`<tr><td><span class="chip ambar">${c}</span></td><td>${esc(d)}</td></tr>`).join(''));
+  $('#tabla-meses-cols').insertAdjacentHTML('beforeend',
+    MESES.map((m,i)=>`<tr><td>${m}</td><td>${MESES_REG_COLS[i][0]}</td><td>${MESES_REG_COLS[i][1]}</td></tr>`).join(''));
+}
+
+function conectarEventos(){
+  /* Navegación */
+  $$('#nav-principal button').forEach(b=>b.addEventListener('click',()=>mostrarVista(b.dataset.vista)));
+
+  /* Carga de archivo */
+  $('#btn-elegir').addEventListener('click',()=>$('#input-archivo').click());
+  $('#input-archivo').addEventListener('change',ev=>{ if(ev.target.files[0]) cargarArchivo(ev.target.files[0]); ev.target.value=''; });
+  $('#btn-ejemplo').addEventListener('click',cargarEjemplo);
+  const zona=$('#zona-drop');
+  ;['dragenter','dragover'].forEach(t=>zona.addEventListener(t,ev=>{ev.preventDefault();zona.classList.add('sobre');}));
+  ;['dragleave','drop'].forEach(t=>zona.addEventListener(t,ev=>{ev.preventDefault();zona.classList.remove('sobre');}));
+  zona.addEventListener('drop',ev=>{ const f=ev.dataTransfer.files[0]; if(f) cargarArchivo(f); });
+  $('#btn-borrar-todo').addEventListener('click',()=>{
+    if(!confirm('Esto eliminará TODOS los datos almacenados en este navegador (planilla cargada, registros de la app y pendientes). ¿Continuar?')) return;
+    localStorage.removeItem(LS_DATOS); localStorage.removeItem(LS_USUARIO);
+    state={equipos:[],registros:[],manuales:[],pendientes:[],meta:null};
+    filtros={}; orden={k:null,dir:1}; busqueda=''; pagina=0; detalleKey=null; invalidar();
+    $('#busqueda-global').value='';
+    renderTodo(); mostrarVista('carga'); toast('🗑 Datos eliminados.');
+  });
+
+  /* Tabla de equipos */
+  $('#busqueda-global').addEventListener('input',ev=>{ busqueda=ev.target.value; pagina=0; invalidar(); renderTabla(); });
+  $('#btn-limpiar-filtros').addEventListener('click',()=>{
+    filtros={}; orden={k:null,dir:1}; busqueda=''; $('#busqueda-global').value=''; pagina=0; invalidar(); renderTabla();
+  });
+  $('#btn-exportar').addEventListener('click',exportarEquipos);
+  $('#sel-pagina').addEventListener('change',()=>{ pagina=0; renderTabla(); });
+  $('#pag-prev').addEventListener('click',()=>{ pagina--; renderTabla(); });
+  $('#pag-next').addEventListener('click',()=>{ pagina++; renderTabla(); });
+  $('#thead-equipos').addEventListener('click',ev=>{
+    const b=ev.target.closest('.btn-filtro');
+    if(b){ ev.stopPropagation(); (popCol===b.dataset.col)?cerrarPopover():abrirPopover(b.dataset.col,b); }
+  });
+  $('#tbody-equipos').addEventListener('click',ev=>{
+    const tr=ev.target.closest('tr[data-key]');
+    if(tr) abrirDetalle(tr.dataset.key);
+  });
+
+  /* Detalle */
+  $('#btn-abrir-mp').addEventListener('click',()=>abrirModalMP(detalleKey,null));
+  $('#btn-abrir-pendiente').addEventListener('click',()=>abrirModalPendiente(detalleKey,null,null));
+  $('#vista-detalle').addEventListener('click',ev=>{
+    const ed=ev.target.closest('[data-editar-mp]');
+    if(ed){ const r=state.manuales.find(m=>m.id===ed.dataset.editarMp); if(r) abrirModalMP(r.equipoKey,r); return; }
+    const bo=ev.target.closest('[data-borrar-mp]');
+    if(bo){
+      const r=state.manuales.find(m=>m.id===bo.dataset.borrarMp);
+      if(r && confirm('¿Eliminar este registro de mantención creado en la aplicación?')){
+        state.manuales=state.manuales.filter(m=>m.id!==r.id); guardar(); renderTodo(); toast('🗑 Registro eliminado.');
+      }
+      return;
+    }
+    const tp=ev.target.closest('tr[data-pendiente]');
+    if(tp){ const p=state.pendientes.find(x=>x.id===tp.dataset.pendiente); if(p) abrirModalPendiente(p.equipoKey,p,null); }
+  });
+
+  /* Modal MP */
+  $('#mp-resultado').addEventListener('change',actualizarHintMP);
+  $('#mp-fecha').addEventListener('change',actualizarHintMP);
+  $('#mp-gestion').addEventListener('change',ev=>$('#mp-gestion-txt').textContent=ev.target.checked?'Sí':'No');
+  $$('#mp-estado button').forEach(b=>b.addEventListener('click',()=>setToggle('mp-estado',b.dataset.v,CLASES_ESTADO)));
+  $$('#mp-tipo button').forEach(b=>b.addEventListener('click',()=>setToggle('mp-tipo',b.dataset.v,CLASES_TIPO)));
+  $('#mp-guardar').addEventListener('click',guardarMP);
+
+  /* Modal Pendiente */
+  $$('#modal-pend .atajos button').forEach(b=>b.addEventListener('click',()=>{ $('#pe-fecha').value=sumarDias(hoyISO(),+b.dataset.dias); }));
+  $('#pe-tarea-add').addEventListener('click',agregarTarea);
+  $('#pe-tarea-nueva').addEventListener('keydown',ev=>{ if(ev.key==='Enter'){ev.preventDefault();agregarTarea();} });
+  $('#pe-gestion-add').addEventListener('click',agregarGestion);
+  $('#pe-gestion-nueva').addEventListener('keydown',ev=>{ if(ev.key==='Enter'){ev.preventDefault();agregarGestion();} });
+  $('#pe-tareas').addEventListener('click',ev=>{
+    const q=ev.target.closest('[data-quitar-tarea]');
+    if(q){ peTareas.splice(+q.dataset.quitarTarea,1); renderPeTareas(); return; }
+    if(ev.target.matches('[data-tarea]')){ peTareas[+ev.target.dataset.tarea].hecha=ev.target.checked; renderPeTareas(); }
+  });
+  $$('#pe-estado button').forEach(b=>b.addEventListener('click',()=>setToggle('pe-estado',b.dataset.v,{'Abierto':'sel-azul','Completado':'sel-verde'})));
+  $('#pe-guardar').addEventListener('click',guardarPendiente);
+  $('#pe-eliminar').addEventListener('click',eliminarPendiente);
+
+  /* Pendientes globales */
+  $('#filtros-pend').addEventListener('click',ev=>{
+    const b=ev.target.closest('[data-fp]');
+    if(b){ filtroPend=b.dataset.fp; renderPendientes(); }
+  });
+  $('#lista-pendientes').addEventListener('click',ev=>{
+    const tr=ev.target.closest('tr[data-pendiente]');
+    if(tr){ const p=state.pendientes.find(x=>x.id===tr.dataset.pendiente); if(p) abrirModalPendiente(p.equipoKey,p,null); }
+  });
+}
+
+/* ---------- Inicio ---------- */
+(function init(){
+  if(typeof XLSX==='undefined'){
+    $('#aviso-xlsx').style.display='';
+    $('#btn-elegir').disabled=true;
+  }
+  poblarSelects();
+  conectarEventos();
+  cargarLocal();
+  renderTodo();
+  mostrarVista(state.equipos.length ? 'equipos' : 'carga');
+})();
+</script>
+</body>
+</html>
