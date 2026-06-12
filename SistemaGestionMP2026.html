@@ -1507,33 +1507,52 @@ function renderDetalle(key){
   }).join('');
   $('#det-obs-planilla').innerHTML = e.regObs ? `<div class="aviso" style="margin-top:14px"><strong>Observación (planilla, col. AR):</strong> ${esc(e.regObs)}</div>` : '';
 
-  /* Historial de mantenciones (planilla + aplicación) */
+  /* Historial de mantenciones: UNA fila por mes, planilla + app unificadas
+     (el mes viene de la planilla; la app aporta fecha de ejecución, ejecutor y detalle) */
+  const appPorMes={}, appOtras=[];
+  manualesEq.forEach(m=>{
+    if(m.fecha && m.fecha.startsWith('2026')){
+      const mm=parseInt(m.fecha.slice(5,7),10)-1;
+      (appPorMes[mm]=appPorMes[mm]||[]).push(m);
+    } else appOtras.push(m);
+  });
+  Object.values(appPorMes).forEach(l=>l.sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'')));
+  const regPorMes={};
+  regsEq.forEach(r=>{ if(r.programa||r.resultado) regPorMes[r.mes]=r; });
+  const mesesH=[...new Set([...Object.keys(regPorMes),...Object.keys(appPorMes)].map(Number))].sort((a,b)=>a-b);
   const filasH=[];
-  regsEq.slice().sort((a,b)=>a.mes-b.mes).forEach(r=>{
-    if(!r.programa && !r.resultado) return;
-    filasH.push(`<tr>
-      <td>${MESES[r.mes]} 2026</td>
-      <td>${chipPrograma(r.programa)||'—'}</td>
-      <td>${chipResultado(r.resultado)||'—'}</td>
-      <td style="max-width:330px">${esc(r.resultado?RESULTADOS[r.resultado]:(r.programa?PROG_CODES[r.programa]:''))}</td>
-      <td>—</td>
-      <td><span class="chip verde">Oficial</span></td>
-      <td><span class="chip gris">Planilla</span></td>
-      <td></td></tr>`);
+  const filaUnificada=(mesTxt, r, m)=>{
+    const programa=(r&&r.programa)||(m&&m.programacion)||'';
+    const resultado=(r&&r.resultado)||(m&&m.resultado)||'';
+    const conflicto = r&&r.resultado && m&&m.resultado && m.resultado!==r.resultado;
+    const oficial=(r&&r.resultado)?'Oficial':(m?(m.tipoRegistro||'Borrador'):'Oficial');
+    const detalles=[
+      m&&m.observaciones?esc(m.observaciones):'',
+      conflicto?`<span class="chip ambar" title="La planilla prevalece en el conteo">App registró: ${esc(m.resultado)}</span>`:'',
+      m&&m.gestionPendiente?'<span class="chip ambar">Gestión pendiente</span>':'',
+      m&&m.estadoEquipo==='No Operativo'?'<span class="chip rojo">Equipo No Operativo</span>':''
+    ].filter(Boolean).join('<br>');
+    return `<tr>
+      <td><strong>${mesTxt}</strong></td>
+      <td>${m?fmtFecha(m.fecha):'—'}</td>
+      <td>${chipPrograma(programa)||'—'}</td>
+      <td>${chipResultado(resultado)||'—'}</td>
+      <td style="max-width:330px">${esc(resultado?RESULTADOS[resultado]:(programa?PROG_CODES[programa]:''))}${detalles?'<br>'+detalles:''}</td>
+      <td>${m?esc(m.ejecutor):'—'}</td>
+      <td>${oficial==='Oficial'?'<span class="chip verde">Oficial</span>':'<span class="chip ambar">Borrador</span>'}</td>
+      <td>${r&&m?'<span class="chip gris">Planilla</span> <span class="chip azul">App</span>':r?'<span class="chip gris">Planilla</span>':'<span class="chip azul">App</span>'}</td>
+      <td style="white-space:nowrap">${m?`<button class="btn mini" data-editar-mp="${m.id}">✎</button> <button class="btn mini peligro" data-borrar-mp="${m.id}">🗑</button>`:''}</td></tr>`;
+  };
+  mesesH.forEach(mes=>{
+    const r=regPorMes[mes]||null;
+    const apps=appPorMes[mes]||[];
+    const principal=apps.length?apps[apps.length-1]:null;
+    filasH.push(filaUnificada(MESES[mes]+' 2026', r, principal));
+    apps.slice(0,-1).forEach(m2=>filasH.push(filaUnificada(MESES[mes]+' 2026 · adicional', null, m2)));
   });
-  manualesEq.slice().reverse().forEach(m=>{
-    filasH.push(`<tr>
-      <td>${fmtFecha(m.fecha)}</td>
-      <td>${chipPrograma(m.programacion)||'—'}</td>
-      <td>${chipResultado(m.resultado)||'—'}</td>
-      <td style="max-width:330px">${esc(RESULTADOS[m.resultado]||'')}${m.observaciones?'<br><small style="color:var(--gris-4)">'+esc(m.observaciones)+'</small>':''}${m.gestionPendiente?'<br><span class="chip ambar">Gestión pendiente</span>':''}</td>
-      <td>${esc(m.ejecutor)}</td>
-      <td>${m.tipoRegistro==='Oficial'?'<span class="chip verde">Oficial</span>':'<span class="chip ambar">Borrador</span>'}</td>
-      <td><span class="chip azul">App</span> ${m.estadoEquipo==='No Operativo'?'<span class="chip rojo">No Op.</span>':''}</td>
-      <td style="white-space:nowrap"><button class="btn mini" data-editar-mp="${m.id}">✎</button> <button class="btn mini peligro" data-borrar-mp="${m.id}">🗑</button></td></tr>`);
-  });
+  appOtras.forEach(m=>filasH.push(filaUnificada((m.fecha||'').slice(0,4)||'—', null, m)));
   $('#det-historial').innerHTML = filasH.length
-    ? `<table class="lista"><tr><th>Mes / Fecha</th><th>Programa</th><th>Resultado</th><th>Significado / Observaciones</th><th>Ejecutor</th><th>Registro</th><th>Origen</th><th></th></tr>${filasH.join('')}</table>`
+    ? `<div style="overflow:auto"><table class="lista"><tr><th>Mes</th><th>Fecha ejecución</th><th>Programa</th><th>Resultado</th><th>Significado / Observaciones</th><th>Ejecutor</th><th>Registro</th><th>Origen</th><th></th></tr>${filasH.join('')}</table></div>`
     : '<div class="vacio">Sin mantenciones registradas para este equipo.</div>';
 
   /* Pendientes del equipo */
