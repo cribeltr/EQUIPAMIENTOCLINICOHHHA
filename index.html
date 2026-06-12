@@ -233,6 +233,20 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
       <button class="btn peligro" id="btn-borrar-todo">🗑 Borrar todos los datos</button>
     </div>
   </div>
+  <div class="card">
+    <h2>Descargas y respaldo</h2>
+    <p class="sub">Descarga todos los registros del sistema en un Excel consolidado, o genera un respaldo completo para resguardar la información o traspasarla a otro computador.</p>
+    <div class="fila-flex">
+      <button class="btn" id="btn-exportar-todo">⬇ Descargar todos los registros (Excel)</button>
+      <button class="btn" id="btn-respaldo">💾 Descargar respaldo (.json)</button>
+      <button class="btn" id="btn-restaurar">📂 Restaurar respaldo…</button>
+      <input type="file" id="input-respaldo" accept=".json,application/json" style="display:none">
+    </div>
+    <div class="aviso" style="margin-top:14px">
+      📦 El <strong>Excel</strong> incluye 4 hojas — Equipos, Programación 2026, Mantenciones (planilla + aplicación) y Pendientes — con celdas de texto que conservan los ceros a la izquierda.
+      El <strong>respaldo .json</strong> guarda absolutamente todo (planilla cargada, borradores, tareas y gestión asociada de los pendientes) y se puede recuperar en este u otro computador con «Restaurar respaldo».
+    </div>
+  </div>
 </section>
 
 <!-- ============ VISTA: EQUIPOS ============ -->
@@ -245,7 +259,8 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
       <button class="btn mini" id="btn-limpiar-filtros" style="display:none">✕ Limpiar filtros</button>
       <span class="contador" id="contador-filas"></span>
       <span style="flex:1"></span>
-      <button class="btn" id="btn-exportar">⬇ Exportar Excel</button>
+      <button class="btn" id="btn-exportar" title="Exporta las filas visibles según los filtros aplicados">⬇ Exportar vista</button>
+      <button class="btn" id="btn-exportar-vista-todo" title="Equipos, programación, mantenciones y pendientes en un solo Excel">⬇ Excel completo</button>
     </div>
     <div class="envoltura-tabla">
       <table class="equipos">
@@ -1009,19 +1024,107 @@ document.addEventListener('click', ev=>{
 document.addEventListener('keydown', ev=>{ if(ev.key==='Escape'){ cerrarPopover(); cerrarModal('modal-mp'); cerrarModal('modal-pend'); } });
 
 /* ---------- Exportación (conserva ceros a la izquierda: celdas de texto) ---------- */
+function hojaTexto(aoa, anchos){
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  /* Forzar tipo texto en todas las celdas para conservar "00039" */
+  Object.keys(ws).forEach(addr=>{ if(addr[0]!=='!'){ ws[addr].t='s'; ws[addr].v=String(ws[addr].v); delete ws[addr].w; } });
+  if(anchos) ws['!cols']=anchos;
+  return ws;
+}
 function exportarEquipos(){
   if(typeof XLSX==='undefined'){ toast('Librería XLSX no disponible.'); return; }
   const filas = filasVisibles();
   if(!filas.length){ toast('No hay filas para exportar.'); return; }
   const aoa = [CAMPOS.map(c=>c.l), ...filas.map(e=>CAMPOS.map(c=>String(e[c.k]||'')))];
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-  /* Forzar tipo texto en todas las celdas para conservar "00039" */
-  Object.keys(ws).forEach(addr=>{ if(addr[0]!=='!'){ ws[addr].t='s'; ws[addr].v=String(ws[addr].v); delete ws[addr].w; } });
-  ws['!cols'] = CAMPOS.map(c=>({wch: Math.max(c.l.length+2, 12)}));
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Equipos');
+  XLSX.utils.book_append_sheet(wb, hojaTexto(aoa, CAMPOS.map(c=>({wch: Math.max(c.l.length+2, 12)}))), 'Equipos');
   XLSX.writeFile(wb, 'Equipos_GMP2026_'+hoyISO()+'.xlsx');
   toast('⬇ Exportados '+filas.length+' equipos.');
+}
+
+/* ---------- Descarga de TODOS los registros (Excel consolidado de 4 hojas) ---------- */
+function exportarTodo(){
+  if(typeof XLSX==='undefined'){ toast('Librería XLSX no disponible.'); return; }
+  if(!state.equipos.length && !state.manuales.length && !state.pendientes.length){ toast('No hay datos para descargar.'); return; }
+  const idx = new Map(state.equipos.map(e=>[e.key,e]));
+  const eqCampo = (k,c) => { const e=idx.get(k); return e ? String(e[c]||'') : k; };
+  const wb = XLSX.utils.book_new();
+
+  /* Hoja 1: Equipos (las mismas columnas del Paso 1) */
+  XLSX.utils.book_append_sheet(wb, hojaTexto(
+    [CAMPOS.map(c=>c.l), ...state.equipos.map(e=>CAMPOS.map(c=>String(e[c.k]||'')))],
+    CAMPOS.map(c=>({wch:Math.max(c.l.length+2,12)}))), 'Equipos');
+
+  /* Hoja 2: Programación 2026 (códigos X/R/RA/PM por mes) */
+  XLSX.utils.book_append_sheet(wb, hojaTexto(
+    [['N° Inventario','Equipo','Serie','Servicio',...MESES],
+     ...state.equipos.map(e=>[e.inventario,e.equipo,e.serie,e.servicio,...MESES.map((_,m)=>(e.prog&&e.prog[m])||'')])],
+    [{wch:14},{wch:30},{wch:16},{wch:18},...MESES.map(()=>({wch:11}))]), 'Programación');
+
+  /* Hoja 3: Mantenciones (registros de la planilla + registros de la aplicación) */
+  const filasM = [['Equipo','Serie','N° Inventario','Servicio','Mes / Fecha','Programa','Resultado','Significado','Ejecutor','Observaciones','Estado equipo','Gestión pendiente','Tipo registro','Origen']];
+  state.registros.slice().sort((a,b)=>a.mes-b.mes).forEach(r=>{
+    filasM.push([eqCampo(r.equipoKey,'equipo'),eqCampo(r.equipoKey,'serie'),eqCampo(r.equipoKey,'inventario'),eqCampo(r.equipoKey,'servicio'),
+      MESES[r.mes]+' 2026', r.programa||'', r.resultado||'',
+      r.resultado ? (RESULTADOS[r.resultado]||'') : (r.programa ? (PROG_CODES[r.programa]||'') : ''),
+      '', r.obs||'', '', '', 'Oficial', 'Planilla']);
+  });
+  state.manuales.slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'')).forEach(m=>{
+    filasM.push([eqCampo(m.equipoKey,'equipo'),eqCampo(m.equipoKey,'serie'),eqCampo(m.equipoKey,'inventario'),eqCampo(m.equipoKey,'servicio'),
+      fmtFecha(m.fecha), m.programacion||'', m.resultado||'', RESULTADOS[m.resultado]||'',
+      m.ejecutor||'', m.observaciones||'', m.estadoEquipo||'', m.gestionPendiente?'Sí':'No', m.tipoRegistro||'', 'Aplicación']);
+  });
+  XLSX.utils.book_append_sheet(wb, hojaTexto(filasM,
+    [{wch:28},{wch:16},{wch:14},{wch:18},{wch:15},{wch:9},{wch:9},{wch:44},{wch:24},{wch:38},{wch:13},{wch:9},{wch:12},{wch:11}]), 'Mantenciones');
+
+  /* Hoja 4: Pendientes (con tareas y bitácora de gestión asociada) */
+  const filasP = [['Equipo','Serie','N° Inventario','Tipo de pendiente','Fecha compromiso','Descripción','Tareas','Responsable Administrativo','Responsable Ejecutivo','Estado','Gestión asociada','Creado']];
+  state.pendientes.forEach(p=>{
+    filasP.push([eqCampo(p.equipoKey,'equipo'),eqCampo(p.equipoKey,'serie'),eqCampo(p.equipoKey,'inventario'),
+      p.tipo||'', fmtFecha(p.fechaCompromiso), p.descripcion||'',
+      (p.tareas||[]).map(t=>(t.hecha?'[✔] ':'[  ] ')+t.texto).join('\n'),
+      p.respAdmin||'', p.respEjec||'', p.estado||'Abierto',
+      (p.gestiones||[]).map(g=>g.fecha+' — '+g.texto).join('\n'), fmtFecha(p.creado)]);
+  });
+  XLSX.utils.book_append_sheet(wb, hojaTexto(filasP,
+    [{wch:28},{wch:16},{wch:14},{wch:32},{wch:15},{wch:36},{wch:44},{wch:24},{wch:24},{wch:11},{wch:54},{wch:11}]), 'Pendientes');
+
+  XLSX.writeFile(wb, 'Registros_GMP2026_'+hoyISO()+'.xlsx');
+  toast('⬇ Excel completo descargado: Equipos, Programación, Mantenciones y Pendientes.');
+}
+
+/* ---------- Respaldo completo (.json) y restauración ---------- */
+function descargarRespaldo(){
+  if(!state.equipos.length && !state.manuales.length && !state.pendientes.length){ toast('No hay datos para respaldar.'); return; }
+  const datos = {
+    app:'Sistema de Gestión MP 2026 — Equipamiento Clínico HHHA',
+    tipo:'respaldo-gmp2026', version:1, fecha:new Date().toISOString(),
+    equipos:state.equipos, registros:state.registros,
+    manuales:state.manuales, pendientes:state.pendientes, meta:state.meta
+  };
+  const blob = new Blob([JSON.stringify(datos)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'Respaldo_GMP2026_'+hoyISO()+'.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+  toast('💾 Respaldo descargado: equipos, mantenciones y pendientes.');
+}
+async function restaurarRespaldo(file){
+  try{
+    const d = JSON.parse(await file.text());
+    if(d.tipo!=='respaldo-gmp2026' || !Array.isArray(d.equipos) || !Array.isArray(d.manuales) || !Array.isArray(d.pendientes))
+      throw new Error('El archivo seleccionado no es un respaldo válido del Sistema de Gestión MP 2026.');
+    const det = d.equipos.length+' equipos, '+(d.registros||[]).length+' registros de planilla, '+d.manuales.length+' mantenciones de la app y '+d.pendientes.length+' pendientes (generado: '+(d.fecha?new Date(d.fecha).toLocaleString('es-CL'):'—')+')';
+    if(!confirm('Restaurar respaldo con '+det+'.\n\nEsto REEMPLAZARÁ todos los datos actuales de la aplicación. ¿Continuar?')) return;
+    state = {equipos:d.equipos, registros:d.registros||[], manuales:d.manuales, pendientes:d.pendientes, meta:d.meta||null};
+    filtros={}; orden={k:null,dir:1}; busqueda=''; pagina=0; detalleKey=null; invalidar();
+    $('#busqueda-global').value='';
+    guardar(); renderTodo(); mostrarVista(state.equipos.length?'equipos':'carga');
+    toast('✅ Respaldo restaurado correctamente.');
+  }catch(err){
+    alert('No fue posible restaurar el respaldo:\n'+err.message);
+  }
 }
 
 /* =====================================================================
@@ -1318,6 +1421,13 @@ function conectarEventos(){
     $('#busqueda-global').value='';
     renderTodo(); mostrarVista('carga'); toast('🗑 Datos eliminados.');
   });
+
+  /* Descargas y respaldo */
+  $('#btn-exportar-todo').addEventListener('click',exportarTodo);
+  $('#btn-exportar-vista-todo').addEventListener('click',exportarTodo);
+  $('#btn-respaldo').addEventListener('click',descargarRespaldo);
+  $('#btn-restaurar').addEventListener('click',()=>$('#input-respaldo').click());
+  $('#input-respaldo').addEventListener('change',ev=>{ if(ev.target.files[0]) restaurarRespaldo(ev.target.files[0]); ev.target.value=''; });
 
   /* Tabla de equipos */
   $('#busqueda-global').addEventListener('input',ev=>{ busqueda=ev.target.value; pagina=0; invalidar(); renderTabla(); });

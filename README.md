@@ -26,6 +26,14 @@ No requiere instalación ni servidor. Los datos quedan guardados localmente en e
 
 Además incluye una pestaña **«Códigos y Reglas»** con las tablas de referencia de los pasos 3, 4, 5 y 6, y un botón **«Cargar datos de ejemplo»** para probar la aplicación sin la planilla real.
 
+## Descargas y respaldo
+
+En la pestaña **Carga de Datos** (sección «Descargas y respaldo», también accesible desde la vista de equipos con «⬇ Excel completo»):
+
+- **Descargar todos los registros (Excel):** genera `Registros_GMP2026_<fecha>.xlsx` con 4 hojas — *Equipos* (columnas del Paso 1), *Programación* (códigos X/R/RA/PM de los 12 meses), *Mantenciones* (registros de la planilla y de la aplicación, con ejecutor, observaciones, tipo Oficial/Borrador y origen) y *Pendientes* (con tareas y bitácora de gestión asociada). Todas las celdas son de texto para conservar los ceros a la izquierda.
+- **Descargar respaldo (.json):** genera `Respaldo_GMP2026_<fecha>.json` con absolutamente todo el estado de la aplicación (planilla cargada, mantenciones, pendientes y metadatos).
+- **Restaurar respaldo:** carga un archivo de respaldo y reemplaza los datos actuales (pide confirmación y valida que el archivo sea un respaldo legítimo del sistema). Permite traspasar la información a otro computador o recuperarla si se limpió el navegador.
+
 ## Estructura del repositorio
 
 ```
