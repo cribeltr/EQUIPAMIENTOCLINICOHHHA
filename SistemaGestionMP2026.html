@@ -57,6 +57,10 @@ nav button:hover{background:rgba(255,255,255,.1);color:#fff}
 nav button.activa{background:var(--gris-1);color:var(--azul-osc);font-weight:600}
 nav .nbadge{background:var(--rojo);color:#fff;font-size:.7rem;border-radius:9px;padding:1px 7px;font-weight:700}
 nav button.activa .nbadge{background:var(--rojo)}
+nav .grabar{margin-left:auto;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:18px;padding:6px 14px;font-size:.82rem;align-self:center}
+nav .grabar:hover{background:rgba(255,255,255,.25);color:#fff}
+nav .grabar.activa{background:var(--rojo);border-color:var(--rojo);font-weight:700;animation:pulso 1.2s infinite}
+@keyframes pulso{0%,100%{box-shadow:0 0 0 0 rgba(197,34,31,.55)}50%{box-shadow:0 0 0 7px rgba(197,34,31,0)}}
 
 main{max-width:1500px;margin:0 auto;padding:20px 22px 60px}
 .vista{display:none}
@@ -243,6 +247,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
     <button data-vista="pendientes">📋 Pendientes <span class="nbadge" id="badge-pend" style="display:none"></span></button>
     <button data-vista="operatividad">🩺 Operatividad <span class="nbadge" id="badge-oper" style="display:none"></span></button>
     <button data-vista="codigos">📖 Códigos y Reglas</button>
+    <button id="btn-grabar" class="grabar" title="Graba localmente tus interacciones (clics, escritura, tiempos) y exporta un archivo para análisis de mejoras. Nada sale de este computador.">🔴 Grabar</button>
   </nav>
 </header>
 
@@ -2210,6 +2215,104 @@ function renderPendientes(){
 }
 
 /* =====================================================================
+   GRABACIÓN DE SESIÓN — telemetría local para análisis de mejoras
+   (nada sale del computador; se exporta manualmente al detener)
+   ===================================================================== */
+let grab=null;
+function selectorDe(el){
+  if(!(el instanceof Element)) return '';
+  const parts=[];
+  let n=el;
+  for(let i=0;i<3 && n && n!==document.body;i++,n=n.parentElement){
+    if(n.id){ parts.unshift('#'+n.id); break; }
+    let s=n.tagName.toLowerCase();
+    if(typeof n.className==='string' && n.className.trim()) s+='.'+n.className.trim().split(/\s+/).slice(0,2).join('.');
+    const ds=Object.entries(n.dataset||{}).slice(0,2).map(([k,v])=>`[data-${k}=${String(v).slice(0,30)}]`).join('');
+    parts.unshift(s+ds);
+  }
+  return parts.join(' ');
+}
+function vistaActiva(){ const v=$$('.vista').find(x=>x.classList.contains('activa')); return v?v.id.replace('vista-',''):''; }
+function grabEvento(ev){ if(grab) grab.eventos.push(Object.assign({t:Date.now()-grab.inicio}, ev)); }
+const grabHandlers={
+  click(e){
+    const el=e.target.closest('button,a,tr,th,label,input,select')||e.target;
+    grabEvento({e:'click', vista:vistaActiva(), sel:selectorDe(el), txt:(el.textContent||el.value||'').trim().slice(0,60)});
+  },
+  input(e){
+    const el=e.target, sel=selectorDe(el);
+    const val=el.type==='password'?'•••':String(el.value).slice(0,120);
+    const ult=grab && grab.eventos[grab.eventos.length-1];
+    if(ult && ult.e==='escribe' && ult.sel===sel){ ult.val=val; ult.t=Date.now()-grab.inicio; }
+    else grabEvento({e:'escribe', vista:vistaActiva(), sel, val});
+  },
+  change(e){
+    const el=e.target;
+    grabEvento({e:'cambia', vista:vistaActiva(), sel:selectorDe(el), val:String(el.type==='checkbox'?el.checked:el.value).slice(0,120)});
+  },
+  keydown(e){ if(e.key==='Enter'||e.key==='Escape') grabEvento({e:'tecla', k:e.key, sel:selectorDe(e.target)}); }
+};
+function grabError(e){ grabEvento({e:'error', msg:String(e.message||e).slice(0,200), linea:(e.lineno||'')+''}); }
+function iniciarGrabacion(){
+  grab={inicio:Date.now(), inicioISO:new Date().toISOString(), eventos:[], origs:{}, timer:null};
+  grabEvento({e:'contexto', vista:vistaActiva(),
+    equipos:state.equipos.length, correctivos:state.correctivos.length,
+    pendientes:state.pendientes.length, manuales:state.manuales.length, empresas:state.empresas.length,
+    viewport:innerWidth+'x'+innerHeight, agente:navigator.userAgent.slice(0,120)});
+  ['click','input','change','keydown'].forEach(t=>document.addEventListener(t, grabHandlers[t], true));
+  window.addEventListener('error', grabError);
+  /* envolver funciones clave para registrar navegación y retroalimentación con precisión */
+  grab.origs.mostrarVista=mostrarVista;
+  mostrarVista=function(id){ grabEvento({e:'vista', id}); return grab.origs.mostrarVista(id); };
+  grab.origs.abrirDetalle=abrirDetalle;
+  abrirDetalle=function(k){ grabEvento({e:'detalle', equipo:String(k).slice(0,60)}); return grab.origs.abrirDetalle(k); };
+  grab.origs.toast=toast;
+  toast=function(m){ grabEvento({e:'toast', msg:String(m).slice(0,160)}); return grab.origs.toast(m); };
+  grab.timer=setInterval(()=>{
+    const s=Math.floor((Date.now()-grab.inicio)/1000);
+    $('#btn-grabar').textContent='⏹ Detener · '+String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
+  },1000);
+  $('#btn-grabar').classList.add('activa');
+  $('#btn-grabar').textContent='⏹ Detener · 00:00';
+  toast('🔴 Grabando localmente (clics, escritura, tiempos). Nada sale de este computador; al detener se descarga el archivo.');
+}
+function detenerGrabacion(){
+  if(!grab) return;
+  ['click','input','change','keydown'].forEach(t=>document.removeEventListener(t, grabHandlers[t], true));
+  window.removeEventListener('error', grabError);
+  clearInterval(grab.timer);
+  mostrarVista=grab.origs.mostrarVista;
+  abrirDetalle=grab.origs.abrirDetalle;
+  toast=grab.origs.toast;
+  const datos={
+    tipo:'grabacion-gmp2026', version:1,
+    inicio:grab.inicioISO, fin:new Date().toISOString(),
+    duracionSeg:Math.round((Date.now()-grab.inicio)/1000),
+    resumen:{
+      eventos:grab.eventos.length,
+      clics:grab.eventos.filter(x=>x.e==='click').length,
+      escritura:grab.eventos.filter(x=>x.e==='escribe').length,
+      cambios:grab.eventos.filter(x=>x.e==='cambia').length,
+      vistas:grab.eventos.filter(x=>x.e==='vista').length,
+      errores:grab.eventos.filter(x=>x.e==='error').length
+    },
+    eventos:grab.eventos
+  };
+  const blob=new Blob([JSON.stringify(datos)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  const f=new Date();
+  a.download='Grabacion_GMP2026_'+hoyISO()+'_'+String(f.getHours()).padStart(2,'0')+String(f.getMinutes()).padStart(2,'0')+'.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+  grab=null;
+  $('#btn-grabar').classList.remove('activa');
+  $('#btn-grabar').textContent='🔴 Grabar';
+  toast('⏹ Grabación exportada: '+datos.resumen.eventos+' eventos en '+datos.duracionSeg+' s. Comparte el archivo para el análisis de mejoras.');
+}
+window.addEventListener('beforeunload',e=>{ if(grab){ e.preventDefault(); e.returnValue=''; } });
+
+/* =====================================================================
    MODALES / EVENTOS GLOBALES
    ===================================================================== */
 function cerrarModal(id){ $('#'+id).classList.remove('abierto'); }
@@ -2235,7 +2338,10 @@ function poblarSelects(){
 
 function conectarEventos(){
   /* Navegación */
-  $$('#nav-principal button').forEach(b=>b.addEventListener('click',()=>mostrarVista(b.dataset.vista)));
+  $$('#nav-principal button[data-vista]').forEach(b=>b.addEventListener('click',()=>mostrarVista(b.dataset.vista)));
+
+  /* Grabación de sesión */
+  $('#btn-grabar').addEventListener('click',()=>grab?detenerGrabacion():iniciarGrabacion());
 
   /* Carga de archivo */
   $('#btn-elegir').addEventListener('click',()=>$('#input-archivo').click());

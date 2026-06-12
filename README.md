@@ -30,6 +30,10 @@ No requiere instalación ni servidor. Los datos quedan guardados localmente en e
 
 Además incluye una pestaña **«Códigos y Reglas»** con las tablas de referencia de los pasos 3, 4, 5 y 6, y un botón **«Cargar datos de ejemplo»** para probar la aplicación sin la planilla real.
 
+## Grabación de sesión (análisis de mejoras)
+
+El botón **«🔴 Grabar»** de la barra superior captura **localmente** la interacción con la aplicación: clics (con selector y texto), escritura en campos (coalescida), cambios de selección, navegación entre vistas, aperturas de ficha, mensajes del sistema, errores de JavaScript y marcas de tiempo de cada evento. **Nada sale del computador**: al presionar «⏹ Detener» se descarga `Grabacion_GMP2026_<fecha>.json` con el resumen y la secuencia completa, pensado para entregarlo al desarrollo y detectar con evidencia dónde se pierde tiempo y qué conviene mejorar. Si la pestaña se cierra con una grabación activa, el navegador pide confirmación.
+
 ## Descargas y respaldo
 
 En la pestaña **Carga de Datos** (sección «Descargas y respaldo», también accesible desde la vista de equipos con «⬇ Excel completo»):
