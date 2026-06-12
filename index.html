@@ -205,6 +205,18 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
 #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:#243140;color:#fff;padding:11px 22px;border-radius:30px;font-size:.9rem;box-shadow:var(--sombra);opacity:0;transition:.3s;z-index:200;pointer-events:none;max-width:90vw;text-align:center}
 #toast.ver{opacity:1;transform:translateX(-50%) translateY(0)}
 
+@media (max-width:1100px){
+  html{font-size:14px}
+  table.equipos{font-size:.76rem}
+  table.equipos thead th .tit{font-size:.72rem}
+  table.equipos tbody td{max-width:108px;padding:6px 5px}
+  .th-int{padding:7px 2px 7px 5px}
+  main{padding:14px 8px 50px}
+}
+@media (max-width:700px){
+  table.equipos tbody td{max-width:110px}
+  .buscador{min-width:140px}
+}
 @media print{header nav,.det-acciones,.barra-tabla,.paginacion{display:none!important}}
 </style>
 </head>
@@ -285,6 +297,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
     <div class="barra-tabla">
       <div class="buscador"><input type="text" id="busqueda-global" placeholder="Buscar en todas las columnas…"></div>
       <button class="btn mini" id="btn-limpiar-filtros" style="display:none">✕ Limpiar filtros</button>
+      <button class="btn mini" id="btn-cols-eq" title="Elegir qué columnas mostrar">⚙ Columnas</button>
       <span class="contador" id="contador-filas"></span>
       <span style="flex:1"></span>
       <button class="btn" id="btn-exportar" title="Exporta las filas visibles según los filtros aplicados">⬇ Exportar vista</button>
@@ -793,7 +806,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-12.13';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-12.14';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -820,6 +833,8 @@ const CAMPOS_CALC = [
   {k:'_pend',        l:'Pendientes'}
 ];
 const CAMPOS_TABLA = CAMPOS.concat(CAMPOS_CALC);
+/* columnas visibles por defecto en la vista de equipos: caben sin desplazamiento horizontal */
+const COLS_EQ_DEFECTO = ['equipo','serie','inventario','servicio','ubicacion','_estado','_actualizado','_pend'];
 /* Columnas de la vista Plan de Mantenimiento (una fila por evento de mantención) */
 const PLAN_COLS = [
   {k:'equipo',l:'Equipo'},{k:'serie',l:'Serie'},{k:'inventario',l:'N° Inventario'},{k:'servicio',l:'Servicio'},
@@ -1448,9 +1463,14 @@ function exportarPlan(){
   toast('⬇ Exportados '+filas.length+' eventos del plan.');
 }
 
+function colsEquiposVisibles(){
+  const sel = (prefs.colsEquipos && prefs.colsEquipos.length) ? new Set(prefs.colsEquipos) : new Set(COLS_EQ_DEFECTO);
+  return CAMPOS_TABLA.filter(c=>sel.has(c.k));
+}
 function renderTabla(){
+  const COLS=colsEquiposVisibles();
   const thead=$('#thead-equipos');
-  thead.innerHTML = CAMPOS_TABLA.map(c=>{
+  thead.innerHTML = COLS.map(c=>{
     const filtrado = !!filtros[c.k];
     const flecha = orden.k===c.k ? (orden.dir===1?' ▲':' ▼') : '';
     return `<th><div class="th-int"><span class="tit">${esc(c.l)}${flecha}</span>
@@ -1467,12 +1487,12 @@ function renderTabla(){
 
   const tbody=$('#tbody-equipos');
   if(!state.equipos.length){
-    tbody.innerHTML = `<tr><td colspan="${CAMPOS_TABLA.length}"><div class="vacio">No hay equipos cargados. Ve a <a href="#" onclick="mostrarVista('carga');return false">Carga de Datos</a>.</div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${COLS.length}"><div class="vacio">No hay equipos cargados. Ve a <a href="#" onclick="mostrarVista('carga');return false">Carga de Datos</a>.</div></td></tr>`;
   } else if(!filas.length){
-    tbody.innerHTML = `<tr><td colspan="${CAMPOS_TABLA.length}"><div class="vacio">Ningún equipo coincide con los filtros aplicados.</div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${COLS.length}"><div class="vacio">Ningún equipo coincide con los filtros aplicados.</div></td></tr>`;
   } else {
     tbody.innerHTML = visibles.map(e =>
-      `<tr data-key="${esc(e.key)}">` + CAMPOS_TABLA.map(c=>`<td title="${esc(e[c.k])}">${esc(e[c.k])}</td>`).join('') + '</tr>'
+      `<tr data-key="${esc(e.key)}">` + COLS.map(c=>`<td title="${esc(e[c.k])}">${esc(e[c.k])}</td>`).join('') + '</tr>'
     ).join('');
   }
   $('#contador-filas').textContent = `Mostrando ${filas.length} de ${state.equipos.length} equipos`;
@@ -1548,6 +1568,27 @@ function abrirPopover(colKey, ancla){
   });
 }
 function cerrarPopover(){ $('#filtro-pop').style.display='none'; popCol=null; popColPlan=null; }
+function abrirSelectorColumnas(ancla){
+  const pop=$('#filtro-pop'); popCol=null; popColPlan=null;
+  const visibles=new Set(colsEquiposVisibles().map(c=>c.k));
+  pop.innerHTML=`<div class="fp-cab">Columnas visibles de la tabla</div>
+    <div class="fp-lista" style="max-height:300px">${CAMPOS_TABLA.map(c=>`<label><input type="checkbox" class="fp-colv" value="${c.k}" ${visibles.has(c.k)?'checked':''}> <span>${esc(c.l)}</span></label>`).join('')}</div>
+    <div class="fp-pie"><button class="defecto">Restablecer</button><button class="ok">Aplicar</button></div>`;
+  const rect=ancla.getBoundingClientRect();
+  pop.style.display='block';
+  let x=rect.left+window.scrollX;
+  if(x+270 > window.scrollX+document.documentElement.clientWidth-10) x=window.scrollX+document.documentElement.clientWidth-280;
+  pop.style.left=x+'px';
+  pop.style.top=(rect.bottom+window.scrollY+6)+'px';
+  pop.querySelector('.defecto').addEventListener('click',()=>{ delete prefs.colsEquipos; guardarPrefs(); renderTabla(); cerrarPopover(); toast('Columnas restablecidas al conjunto compacto.'); });
+  pop.querySelector('.ok').addEventListener('click',()=>{
+    const sel=[...pop.querySelectorAll('.fp-colv')].filter(c=>c.checked).map(c=>c.value);
+    if(!sel.length){ toast('⚠️ Selecciona al menos una columna.'); return; }
+    prefs.colsEquipos=sel; guardarPrefs();
+    grabEvento({e:'columnas', visibles:sel.length});
+    renderTabla(); cerrarPopover();
+  });
+}
 document.addEventListener('click', ev=>{
   const pop=$('#filtro-pop');
   if(pop.style.display==='block' && !pop.contains(ev.target) && !ev.target.closest('.btn-filtro')) cerrarPopover();
@@ -1566,9 +1607,10 @@ function exportarEquipos(){
   if(typeof XLSX==='undefined'){ toast('Librería XLSX no disponible.'); return; }
   const filas = filasVisibles();
   if(!filas.length){ toast('No hay filas para exportar.'); return; }
-  const aoa = [CAMPOS_TABLA.map(c=>c.l), ...filas.map(e=>CAMPOS_TABLA.map(c=>String(e[c.k]||'')))];
+  const COLS=colsEquiposVisibles();
+  const aoa = [COLS.map(c=>c.l), ...filas.map(e=>COLS.map(c=>String(e[c.k]||'')))];
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, hojaTexto(aoa, CAMPOS_TABLA.map(c=>({wch: Math.max(c.l.length+2, 12)}))), 'Equipos');
+  XLSX.utils.book_append_sheet(wb, hojaTexto(aoa, COLS.map(c=>({wch: Math.max(c.l.length+2, 12)}))), 'Equipos');
   XLSX.writeFile(wb, 'Equipos_GMP2026_'+hoyISO()+'.xlsx');
   toast('⬇ Exportados '+filas.length+' equipos.');
 }
@@ -2860,6 +2902,7 @@ function conectarEventos(){
   $('#btn-limpiar-filtros').addEventListener('click',()=>{
     filtros={}; orden={k:null,dir:1}; busqueda=''; $('#busqueda-global').value=''; pagina=0; invalidar(); renderTabla();
   });
+  $('#btn-cols-eq').addEventListener('click',ev=>{ ev.stopPropagation(); abrirSelectorColumnas(ev.currentTarget); });
   $('#btn-exportar').addEventListener('click',exportarEquipos);
   $('#sel-pagina').addEventListener('change',()=>{ pagina=0; renderTabla(); });
   $('#pag-prev').addEventListener('click',()=>{ pagina--; renderTabla(); });
