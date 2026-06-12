@@ -312,6 +312,20 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
   <div class="card">
     <h2>📅 Plan de Mantenimiento</h2>
     <p class="sub">Una fila por evento de mantención (equipo y mes), uniendo la programación, la planilla y los registros de la app. Cada columna con filtros tipo Excel; presiona una fila para abrir la ficha del equipo.</p>
+    <div class="fila-flex" style="margin-bottom:10px;font-size:.8rem;gap:8px">
+      <span class="chip azul">X</span> Programada
+      <span class="chip ambar">R</span> Reprogramada
+      <span class="chip morado">RA</span> Reprogramada de Año Anterior
+      <span class="chip cian">PM</span> Puesta en Marcha
+      <span style="color:var(--gris-3)">|</span>
+      <span class="chip verde">Si</span> Realizada
+      <span class="chip ambar">C1–C8</span> Reprog. (causal)
+      <span class="chip teal">Si-RA</span> Año Anterior Realizada
+      <span class="chip rojo">FS</span> Fuera de Servicio
+      <span class="chip rojo">No</span> No Realizada
+      <span class="chip morado">NU</span> No Ubicable
+      <span class="chip negro">Baja</span> Dado de Baja
+    </div>
     <div class="barra-tabla">
       <div class="buscador"><input type="text" id="busqueda-plan" placeholder="Buscar en el plan…"></div>
       <button class="btn mini" id="btn-limpiar-plan" style="display:none">✕ Limpiar filtros</button>
