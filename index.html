@@ -252,6 +252,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
     <h2>Resumen de la carga</h2>
     <p class="sub" id="resumen-meta"></p>
     <div class="resumen-grid" id="resumen-kpis"></div>
+    <div id="resumen-meses"></div>
     <div id="resumen-avisos"></div>
     <div class="fila-flex" style="margin-top:16px">
       <button class="btn primario" onclick="mostrarVista('equipos')">Ir a la vista de equipos →</button>
@@ -1119,18 +1120,21 @@ function renderResumen(){
   card.style.display='';
   $('#resumen-meta').innerHTML = `Archivo: <strong>${esc(state.meta.archivo)}</strong> · Cargado: ${esc(state.meta.fechaCarga)} · Hojas: <strong>${esc(state.meta.hojaPMP)}</strong> / <strong>${esc(state.meta.hojaReg)}</strong>`;
   const progTotal = state.equipos.reduce((a,e)=>a+Object.keys(e.prog||{}).length,0);
-  const conRes = state.registros.filter(r=>r.resultado);
-  const realizadas = conRes.filter(r=>r.resultado==='Si'||r.resultado==='Si-RA').length;
-  const reprog = conRes.filter(r=>/^C[1-8]$/.test(r.resultado)).length;
+  /* resultados unificados: la MP registrada en la app cuenta en su mes (sin duplicar la planilla) */
+  const unif = resultadosPorMes();
+  const realizadas = unif.filter(r=>r.resultado==='Si'||r.resultado==='Si-RA').length;
+  const reprog = unif.filter(r=>/^C[1-8]$/.test(r.resultado)).length;
+  const aporteApp = unif.filter(r=>r.origen==='app').length;
   /* Flujo correctivo: OTs abiertas y equipos detenidos */
   const otsAbiertas = state.correctivos.filter(c=>tipoEventoDe(c)==='Orden de Trabajo' && estadoEventoDe(c)==='Abierto');
   const eqDetenidos = [...new Set(otsAbiertas.filter(equipoDetenidoEn).map(c=>c.equipoKey))];
   const kpis = [
     [state.equipos.length,'Equipos cargados'],
     [progTotal,'Mantenciones programadas 2026'],
-    [conRes.length,'Resultados registrados'],
+    [unif.length,'Resultados registrados (planilla + app)'],
     [realizadas,'Realizadas (Si / Si-RA)'],
     [reprog,'Reprogramadas (C1–C8)'],
+    [aporteApp,'Aportados por la app a su mes'],
     [state.meta.oficializados,'Borradores actualizados a Oficial'],
     [state.manuales.length,'Registros creados en la app'],
     [state.pendientes.filter(p=>p.estado!=='Completado').length,'Pendientes abiertos'],
@@ -1139,6 +1143,30 @@ function renderResumen(){
     [eqDetenidos.length,'Equipos detenidos (OT abierta)']
   ];
   $('#resumen-kpis').innerHTML = kpis.map(k=>`<div class="kpi"><b>${k[0]}</b><span>${k[1]}</span></div>`).join('');
+
+  /* Cumplimiento mensual: programación PMP vs resultados unificados (la app suma en su mes) */
+  const progMes={};
+  state.equipos.forEach(e=>{ Object.keys(e.prog||{}).forEach(m=>{ progMes[m]=(progMes[m]||0)+1; }); });
+  const filasMes=[];
+  let tP=0,tU=0,tOk=0,tApp=0;
+  for(let m=0;m<12;m++){
+    const p=progMes[m]||0;
+    const u=unif.filter(r=>r.mes===m);
+    if(!p && !u.length) continue;
+    const okM=u.filter(r=>r.resultado==='Si'||r.resultado==='Si-RA').length;
+    const appM=u.filter(r=>r.origen==='app').length;
+    const futuro = m>new Date().getMonth() && !u.length;   /* meses aún no iniciados: sin % */
+    const pct=(p && !futuro)?Math.round(100*okM/p):null;
+    tP+=p; tU+=u.length; tOk+=okM; tApp+=appM;
+    filasMes.push(`<tr><td><strong>${MESES[m]}</strong></td><td>${p||'—'}</td><td>${u.length||'—'}</td><td>${okM||'—'}</td><td>${appM?`<span class="chip azul">+${appM}</span>`:'—'}</td><td>${pct===null?'—':`<strong style="color:${pct>=90?'var(--verde)':pct>=70?'var(--ambar)':'var(--rojo)'}">${pct}%</strong>`}</td></tr>`);
+  }
+  const pctT=tP?Math.round(100*tOk/tP):0;
+  $('#resumen-meses').innerHTML = filasMes.length ? `<h3>Cumplimiento mensual 2026 · planilla + app</h3>
+    <div style="overflow:auto"><table class="cod">
+    <tr><th>Mes</th><th>Programadas</th><th>Con resultado</th><th>Realizadas</th><th>De la app</th><th>% cumplimiento</th></tr>
+    ${filasMes.join('')}
+    <tr style="background:var(--gris-1)"><td><strong>Total</strong></td><td><strong>${tP}</strong></td><td><strong>${tU}</strong></td><td><strong>${tOk}</strong></td><td><strong>${tApp||'—'}</strong></td><td><strong>${pctT}%</strong></td></tr>
+    </table></div>` : '';
   $('#resumen-avisos').innerHTML =
     (eqDetenidos.length?`<div class="aviso rojo">🔴 <strong>Equipos detenidos con OT abierta:</strong> ${eqDetenidos.map(k=>{
       const e=equipoPorKey(k);
@@ -1326,20 +1354,21 @@ function exportarTodo(){
     [{wch:14},{wch:30},{wch:16},{wch:18},...MESES.map(()=>({wch:11}))]), 'Programación');
 
   /* Hoja 3: Mantenciones (registros de la planilla + registros de la aplicación) */
-  const filasM = [['Equipo','Serie','N° Inventario','Servicio','Mes / Fecha','Programa','Resultado','Significado','Ejecutor','Observaciones','Estado equipo','Gestión pendiente','Tipo registro','Origen']];
+  const filasM = [['Equipo','Serie','N° Inventario','Servicio','Mes','Mes / Fecha','Programa','Resultado','Significado','Ejecutor','Observaciones','Estado equipo','Gestión pendiente','Tipo registro','Origen']];
   state.registros.slice().sort((a,b)=>a.mes-b.mes).forEach(r=>{
     filasM.push([eqCampo(r.equipoKey,'equipo'),eqCampo(r.equipoKey,'serie'),eqCampo(r.equipoKey,'inventario'),eqCampo(r.equipoKey,'servicio'),
-      MESES[r.mes]+' 2026', r.programa||'', r.resultado||'',
+      MESES[r.mes], MESES[r.mes]+' 2026', r.programa||'', r.resultado||'',
       r.resultado ? (RESULTADOS[r.resultado]||'') : (r.programa ? (PROG_CODES[r.programa]||'') : ''),
       '', r.obs||'', '', '', 'Oficial', 'Planilla']);
   });
   state.manuales.slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'')).forEach(m=>{
+    const mesApp = (m.fecha||'').startsWith('2026') ? MESES[parseInt(m.fecha.slice(5,7),10)-1] : '';
     filasM.push([eqCampo(m.equipoKey,'equipo'),eqCampo(m.equipoKey,'serie'),eqCampo(m.equipoKey,'inventario'),eqCampo(m.equipoKey,'servicio'),
-      fmtFecha(m.fecha), m.programacion||'', m.resultado||'', RESULTADOS[m.resultado]||'',
+      mesApp, fmtFecha(m.fecha), m.programacion||'', m.resultado||'', RESULTADOS[m.resultado]||'',
       m.ejecutor||'', m.observaciones||'', m.estadoEquipo||'', m.gestionPendiente?'Sí':'No', m.tipoRegistro||'', 'Aplicación']);
   });
   XLSX.utils.book_append_sheet(wb, hojaTexto(filasM,
-    [{wch:28},{wch:16},{wch:14},{wch:18},{wch:15},{wch:9},{wch:9},{wch:44},{wch:24},{wch:38},{wch:13},{wch:9},{wch:12},{wch:11}]), 'Mantenciones');
+    [{wch:28},{wch:16},{wch:14},{wch:18},{wch:11},{wch:15},{wch:9},{wch:9},{wch:44},{wch:24},{wch:38},{wch:13},{wch:9},{wch:12},{wch:11}]), 'Mantenciones');
 
   /* Hoja 4: Pendientes (con tareas y bitácora de gestión asociada) */
   const filasP = [['Equipo','Serie','N° Inventario','Tipo de pendiente','Fecha compromiso','Descripción','Tareas','Responsable Administrativo','Responsable Ejecutivo','Estado','Gestión asociada','Creado']];
@@ -1823,6 +1852,19 @@ function estadoActualEquipo(key){
   ].sort((a,b)=>b.f.localeCompare(a.f));
   return cand.length?cand[0].est:null;
 }
+function resultadosPorMes(){
+  /* une los resultados de la planilla con las MP registradas en la app, sin duplicar:
+     por cada equipo+mes manda la planilla; la app aporta donde la planilla aún no tiene resultado */
+  const mapa=new Map();
+  state.registros.forEach(r=>{ if(r.resultado) mapa.set(r.equipoKey+'|'+r.mes, {equipoKey:r.equipoKey, mes:r.mes, resultado:r.resultado, programa:r.programa||'', origen:'planilla'}); });
+  state.manuales.forEach(m=>{
+    if(!m.resultado||!m.fecha||!m.fecha.startsWith('2026')) return;
+    const mes=parseInt(m.fecha.slice(5,7),10)-1;
+    const k=m.equipoKey+'|'+mes;
+    if(!mapa.has(k)) mapa.set(k,{equipoKey:m.equipoKey, mes, resultado:m.resultado, programa:m.programacion||'', origen:'app', tipoRegistro:m.tipoRegistro||'Borrador'});
+  });
+  return [...mapa.values()];
+}
 function tableroOperatividad(){
   const items=new Map();
   const get=k=>{ if(!items.has(k)) items.set(k,{equipoKey:k}); return items.get(k); };
@@ -1845,16 +1887,16 @@ function tableroOperatividad(){
     if(est && est!=='Operativo') get(e.key).estado=est;
     else if(items.has(e.key)) items.get(e.key).estado=est||'';
   });
-  /* 3) FS / NU según planilla, sin Si posterior y sin Baja */
+  /* 3) FS / NU sin resolución posterior, según resultados unificados (planilla + app) */
   const porEq={};
-  state.registros.forEach(r=>{ (porEq[r.equipoKey]=porEq[r.equipoKey]||[]).push(r); });
+  resultadosPorMes().forEach(r=>{ (porEq[r.equipoKey]=porEq[r.equipoKey]||[]).push(r); });
   Object.entries(porEq).forEach(([k,rs])=>{
     if(rs.some(r=>r.resultado==='Baja')) return;
     const malos=rs.filter(r=>r.resultado==='FS'||r.resultado==='NU');
     if(!malos.length) return;
     const peor=malos.sort((a,b)=>b.mes-a.mes)[0];
     if(!rs.some(r=>(r.resultado==='Si'||r.resultado==='Si-RA') && r.mes>peor.mes)){
-      const it=get(k); it.planilla={cod:peor.resultado, mes:peor.mes};
+      const it=get(k); it.planilla={cod:peor.resultado, mes:peor.mes, origen:peor.origen};
     }
   });
   const lista=[...items.values()];
