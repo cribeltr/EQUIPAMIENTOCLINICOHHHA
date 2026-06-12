@@ -339,7 +339,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
   </div>
 
   <div class="card">
-    <h2>Mantenimiento Correctivo · Documentos</h2>
+    <h2>Mantenimiento Correctivo · Eventos</h2>
     <p class="sub">Órdenes de Trabajo, Reportes de Servicio y Envíos a Servicio Técnico del equipo.</p>
     <div id="det-correctivos"></div>
   </div>
@@ -550,8 +550,8 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
     </div>
     <div class="modal-cuerpo">
       <div class="f-grupo">
-        <label class="et">Tipo de documento <span class="req">*</span></label>
-        <select id="ot-tipo-doc">
+        <label class="et">Tipo de evento <span class="req">*</span></label>
+        <select id="ot-tipo-evento">
           <option value="Orden de Trabajo">Orden de Trabajo</option>
           <option value="Reporte de Servicio">Reporte de Servicio</option>
           <option value="Envío a Servicio Técnico">Envío a Servicio Técnico</option>
@@ -601,7 +601,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
     <div class="modal-pie">
       <button class="btn peligro" id="ot-eliminar" style="display:none;margin-right:auto">🗑 Eliminar</button>
       <button class="btn" data-cerrar="modal-ot">Cancelar</button>
-      <button class="btn primario" id="ot-guardar">💾 Guardar documento</button>
+      <button class="btn primario" id="ot-guardar">💾 Guardar evento</button>
     </div>
   </div>
 </div>
@@ -976,7 +976,7 @@ function renderResumen(){
     [state.meta.oficializados,'Borradores actualizados a Oficial'],
     [state.manuales.length,'Registros creados en la app'],
     [state.pendientes.filter(p=>p.estado!=='Completado').length,'Pendientes abiertos'],
-    [state.correctivos.length,'Documentos de mant. correctivo']
+    [state.correctivos.length,'Eventos de mant. correctivo']
   ];
   $('#resumen-kpis').innerHTML = kpis.map(k=>`<div class="kpi"><b>${k[0]}</b><span>${k[1]}</span></div>`).join('');
   $('#resumen-avisos').innerHTML =
@@ -1187,11 +1187,11 @@ function exportarTodo(){
   XLSX.utils.book_append_sheet(wb, hojaTexto(filasP,
     [{wch:28},{wch:16},{wch:14},{wch:32},{wch:15},{wch:36},{wch:44},{wch:24},{wch:24},{wch:11},{wch:54},{wch:11}]), 'Pendientes');
 
-  /* Hoja 5: Correctivos — documentos del Paso 10 (OT / Reporte / Envío a ST) */
-  const filasC = [['Equipo','Serie','N° Inventario','Servicio','Tipo de documento','Requerimiento','Fecha documento','Folio Solicitud SIGEM','Técnico asignado','Estado del equipo','Gestión pendiente','Tipo registro','Creado']];
+  /* Hoja 5: Correctivos — eventos del Paso 10 (OT / Reporte / Envío a ST) */
+  const filasC = [['Equipo','Serie','N° Inventario','Servicio','Tipo de evento','Requerimiento','Fecha documento','Folio Solicitud SIGEM','Técnico asignado','Estado del equipo','Gestión pendiente','Tipo registro','Creado']];
   state.correctivos.slice().sort((a,b)=>(a.fechaDocumento||'').localeCompare(b.fechaDocumento||'')).forEach(c=>{
     filasC.push([eqCampo(c.equipoKey,'equipo'),eqCampo(c.equipoKey,'serie'),eqCampo(c.equipoKey,'inventario'),eqCampo(c.equipoKey,'servicio'),
-      tipoDocDe(c), c.requerimiento||'', fmtFecha(c.fechaDocumento), c.folioSigem||'',
+      tipoEventoDe(c), c.requerimiento||'', fmtFecha(c.fechaDocumento), c.folioSigem||'',
       c.tecnico||'', estadoCorrectivoDe(c.estadoEquipo), c.gestionPendiente?'Sí':'No', c.tipoRegistro||'Oficial', fmtFecha(c.creado)]);
   });
   XLSX.utils.book_append_sheet(wb, hojaTexto(filasC,
@@ -1319,13 +1319,13 @@ function renderDetalle(key){
   const pendEq = state.pendientes.filter(p=>p.equipoKey===key);
   $('#det-pendientes').innerHTML = pendEq.length ? tablaPendientes(pendEq) : '<div class="vacio">Sin pendientes para este equipo. Usa el botón «📋 Pendientes» para crear uno.</div>';
 
-  /* Documentos de mantenimiento correctivo (Paso 10) */
+  /* Eventos de mantenimiento correctivo (Paso 10) */
   $('#det-correctivos').innerHTML = otsEq.length ? `<table class="lista">
-    <tr><th>Tipo de documento</th><th>Fecha doc.</th><th>Folio SIGEM</th><th>Requerimiento</th><th>Técnico asignado</th><th>Estado equipo</th><th>Registro</th><th></th></tr>
+    <tr><th>Tipo de evento</th><th>Fecha doc.</th><th>Folio SIGEM</th><th>Requerimiento</th><th>Técnico asignado</th><th>Estado equipo</th><th>Registro</th><th></th></tr>
     ${otsEq.map(c=>{
       const est = estadoCorrectivoDe(c.estadoEquipo);
       return `<tr>
-      <td><strong>${esc(tipoDocDe(c))}</strong></td>
+      <td><strong>${esc(tipoEventoDe(c))}</strong></td>
       <td>${fmtFecha(c.fechaDocumento)}</td>
       <td>${esc(c.folioSigem)||'—'}</td>
       <td style="max-width:280px">${esc(c.requerimiento)||'—'}${c.gestionPendiente?'<br><span class="chip ambar">Gestión pendiente</span>':''}</td>
@@ -1334,7 +1334,7 @@ function renderDetalle(key){
       <td>${(c.tipoRegistro||'Oficial')==='Oficial'?'<span class="chip verde">Oficial</span>':'<span class="chip ambar">Borrador</span>'}</td>
       <td style="white-space:nowrap"><button class="btn mini" data-editar-ot="${c.id}">✎</button> <button class="btn mini peligro" data-borrar-ot="${c.id}">🗑</button></td></tr>`;
     }).join('')}
-  </table>` : '<div class="vacio">Sin documentos de mantenimiento correctivo. Usa el botón «🔩 Mantenimiento Correctivo» para crear una Orden de Trabajo, un Reporte de Servicio o un Envío a Servicio Técnico.</div>';
+  </table>` : '<div class="vacio">Sin eventos de mantenimiento correctivo. Usa el botón «🔩 Mantenimiento Correctivo» para registrar una Orden de Trabajo, un Reporte de Servicio o un Envío a Servicio Técnico.</div>';
 }
 
 /* =====================================================================
@@ -1478,12 +1478,12 @@ function eliminarPendiente(){
 
 /* =====================================================================
    PASO 10 — FORMULARIO DE MANTENIMIENTO CORRECTIVO
-   (tipos de documento: Orden de Trabajo / Reporte de Servicio /
+   (tipos de evento: Orden de Trabajo / Reporte de Servicio /
     Envío a Servicio Técnico)
    ===================================================================== */
 let otEditando=null;
-/* Compatibilidad con documentos creados antes de la versión 3 de la especificación */
-const tipoDocDe = c => c.tipoDocumento || 'Orden de Trabajo';
+/* Compatibilidad con eventos creados antes de las versiones 3 y 4 de la especificación */
+const tipoEventoDe = c => c.tipoEvento || c.tipoDocumento || 'Orden de Trabajo';
 const estadoCorrectivoDe = v => v==='Servicio' ? 'Servicio Técnico' : (v||'Operativo');
 function abrirModalOT(equipoKey, ot){
   const e=equipoPorKey(equipoKey); if(!e) return;
@@ -1494,7 +1494,7 @@ function abrirModalOT(equipoKey, ot){
 }
 function cargarFormOT(ot){
   otEditando = ot||null;
-  $('#ot-tipo-doc').value = ot?tipoDocDe(ot):'Orden de Trabajo';
+  $('#ot-tipo-evento').value = ot?tipoEventoDe(ot):'Orden de Trabajo';
   $('#ot-requerimiento').value = ot?(ot.requerimiento||''):'';
   $('#ot-fecha').value = ot?(ot.fechaDocumento||''):hoyISO();
   $('#ot-folio').value = ot?(ot.folioSigem||''):'';
@@ -1507,28 +1507,28 @@ function cargarFormOT(ot){
 }
 function guardarOT(){
   const equipoKey=$('#modal-ot').dataset.equipo;
-  const tipoDoc=$('#ot-tipo-doc').value, fecha=$('#ot-fecha').value,
+  const tipoEvento=$('#ot-tipo-evento').value, fecha=$('#ot-fecha').value,
         folio=$('#ot-folio').value.trim(), tec=$('#ot-tecnico').value;
-  if(!tipoDoc||!fecha||!folio||!tec){ toast('⚠️ Completa tipo de documento, fecha, Folio de Solicitud de SIGEM y técnico asignado.'); return; }
-  const datos={ equipoKey, tipoDocumento:tipoDoc, requerimiento:$('#ot-requerimiento').value.trim(),
+  if(!tipoEvento||!fecha||!folio||!tec){ toast('⚠️ Completa tipo de evento, fecha, Folio de Solicitud de SIGEM y técnico asignado.'); return; }
+  const datos={ equipoKey, tipoEvento, requerimiento:$('#ot-requerimiento').value.trim(),
     fechaDocumento:fecha, folioSigem:folio, tecnico:tec,
     estadoEquipo:$('#ot-estado').value||'Operativo',
     gestionPendiente:$('#ot-gestion').checked,
     tipoRegistro:valToggle('ot-tipo-reg')||'Oficial' };
   const esNuevo = !otEditando;
-  if(otEditando){ Object.assign(otEditando, datos, {actualizado:hoyISO()}); toast('✅ Documento actualizado.'); }
-  else { state.correctivos.push(Object.assign({id:uid(), creado:hoyISO()}, datos)); toast('✅ '+tipoDoc+' guardado ('+datos.tipoRegistro+').'); }
+  if(otEditando){ delete otEditando.tipoDocumento; Object.assign(otEditando, datos, {actualizado:hoyISO()}); toast('✅ Evento actualizado.'); }
+  else { state.correctivos.push(Object.assign({id:uid(), creado:hoyISO()}, datos)); toast('✅ '+tipoEvento+' guardado ('+datos.tipoRegistro+').'); }
   guardar(); cerrarModal('modal-ot'); otEditando=null; renderTodo();
   /* Si quedó una gestión pendiente, abrir de inmediato el formulario de Pendientes */
   if(datos.gestionPendiente && esNuevo){
-    abrirModalPendiente(equipoKey, null, {tipo:'Otro', descripcion:`Asociado a ${tipoDoc} folio ${folio} del ${fmtFecha(fecha)}.`});
+    abrirModalPendiente(equipoKey, null, {tipo:'Otro', descripcion:`Asociado a ${tipoEvento} folio ${folio} del ${fmtFecha(fecha)}.`});
   }
 }
 function eliminarOT(){
   if(!otEditando) return;
-  if(!confirm('¿Eliminar este documento de mantenimiento correctivo?')) return;
+  if(!confirm('¿Eliminar este evento de mantenimiento correctivo?')) return;
   state.correctivos = state.correctivos.filter(c=>c.id!==otEditando.id);
-  guardar(); cerrarModal('modal-ot'); otEditando=null; renderTodo(); toast('🗑 Documento eliminado.');
+  guardar(); cerrarModal('modal-ot'); otEditando=null; renderTodo(); toast('🗑 Evento eliminado.');
 }
 
 /* ---------- Vista global de pendientes ---------- */
