@@ -748,7 +748,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-12.11';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-12.12';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -955,6 +955,7 @@ function procesarWorkbook(wb, nombreArchivo){
   /* ---- Paso 4: hoja Registro_MP-2026 ---- */
   const registros = [];
   let filasSinVinculo = 0, ignorados = 0;
+  const ignoradosDet = [];   /* detalle: celda exacta, valor y fila de cada valor no válido en P/R */
   const nomReg = buscarHoja(wb,'Registro_MP-2026') || buscarHoja(wb,'Registro_MP_2026') || buscarHoja(wb,'RegistroMP2026');
   if(!nomReg){
     avisos.push('No se encontró la hoja "Registro_MP-2026": no se cargaron registros de mantención.');
@@ -985,8 +986,8 @@ function procesarWorkbook(wb, nombreArchivo){
         const p = normPrograma(rawP);
         const res = normResultado(rawR);
         /* Ignorar valores no válidos (ceros de relleno y números sueltos como "22" o "27") */
-        if(rawP!=='' && rawP!=='0' && !p) ignorados++;
-        if(rawR!=='' && rawR!=='0' && !res) ignorados++;
+        if(rawP!=='' && rawP!=='0' && !p){ ignorados++; if(ignoradosDet.length<150) ignoradosDet.push({fila:r+1, col:par[0], mes:m, tipo:'P', valor:String(rawP).slice(0,30), serie:serie||inv||''}); }
+        if(rawR!=='' && rawR!=='0' && !res){ ignorados++; if(ignoradosDet.length<150) ignoradosDet.push({fila:r+1, col:par[1], mes:m, tipo:'R', valor:String(rawR).slice(0,30), serie:serie||inv||''}); }
         if(p || res){ filaConDatos = true; regsFila.push({mes:m, programa:p, resultado:res, obs}); }
       });
       if(!filaConDatos) continue;
@@ -1014,6 +1015,7 @@ function procesarWorkbook(wb, nombreArchivo){
   state.meta = {
     archivo: nombreArchivo, fechaCarga: new Date().toLocaleString('es-CL'),
     hojaPMP: nomPMP, hojaReg: nomReg||'—', avisos, oficializados,
+    ignoradosDetalle: ignoradosDet,
     ejemplo:false
   };
   filtros = {}; orden = {k:null,dir:1}; busqueda=''; pagina=0; cacheFiltradas=null;
@@ -1160,9 +1162,11 @@ function renderResumen(){
   const realizadas = unif.filter(r=>r.resultado==='Si'||r.resultado==='Si-RA').length;
   const reprog = unif.filter(r=>/^C[1-8]$/.test(r.resultado)).length;
   const aporteApp = unif.filter(r=>r.origen==='app').length;
-  /* Flujo correctivo: OTs abiertas y equipos detenidos */
-  const otsAbiertas = state.correctivos.filter(c=>tipoEventoDe(c)==='Orden de Trabajo' && estadoEventoDe(c)==='Abierto');
-  const eqDetenidos = [...new Set(otsAbiertas.filter(equipoDetenidoEn).map(c=>c.equipoKey))];
+  /* Flujo correctivo: expedientes abiertos y equipos detenidos (criticidad por racha) */
+  const expAbiertos = expedientesDe(state.correctivos).map(nodosExpediente).filter(x=>!x.cerrado);
+  const detenidosX = expAbiertos.filter(x=>x.critico);
+  const otsAbiertas = expAbiertos;
+  const eqDetenidos = [...new Set(detenidosX.map(x=>x.ot.equipoKey))];
   const kpis = [
     [state.equipos.length,'Equipos cargados'],
     [progTotal,'Mantenciones programadas 2026'],
@@ -1205,13 +1209,19 @@ function renderResumen(){
   $('#resumen-avisos').innerHTML =
     (eqDetenidos.length?`<div class="aviso rojo">🔴 <strong>Equipos detenidos con OT abierta:</strong> ${eqDetenidos.map(k=>{
       const e=equipoPorKey(k);
-      const ot=otsAbiertas.filter(c=>c.equipoKey===k && c.fechaDocumento).sort((a,b)=>a.fechaDocumento.localeCompare(b.fechaDocumento))[0];
-      const dias=ot?diasEntre(ot.fechaDocumento,hoyISO()):'—';
+      const dias=Math.max(...detenidosX.filter(x=>x.ot.equipoKey===k).map(x=>x.dias||0));
       return `<a href="#" data-det-eq="${esc(k)}" style="font-weight:600">${esc(e?e.equipo:k)}${e&&e.serie?' ('+esc(e.serie)+')':''}</a> — ${dias} días`;
     }).join(' · ')}</div>`:'') +
     (state.meta.ejemplo?'<div class="aviso ambar">⚠️ Estás trabajando con <strong>datos de ejemplo</strong>. Carga la planilla real para reemplazarlos.</div>':'') +
     (state.meta.oficializados?`<div class="aviso verde">✔ ${state.meta.oficializados} registro(s) en Borrador se actualizaron a <strong>Oficial</strong> porque la mantención aparece en la planilla recargada.</div>`:'') +
-    (state.meta.avisos||[]).map(a=>`<div class="aviso ambar">⚠️ ${esc(a)}</div>`).join('');
+    (state.meta.avisos||[]).map(a=>`<div class="aviso ambar">⚠️ ${esc(a)}</div>`).join('') +
+    ((state.meta.ignoradosDetalle||[]).length?`<details class="aviso ambar">
+      <summary style="cursor:pointer"><strong>Ver el detalle de los valores ignorados en P/R</strong> — celda exacta en la planilla, valor leído y mes</summary>
+      <div style="overflow:auto;max-height:300px;margin-top:8px">
+        <table class="cod"><tr><th>Celda</th><th>Mes</th><th>Col.</th><th>Valor leído</th><th>Serie / N° Inv. de la fila</th></tr>
+        ${state.meta.ignoradosDetalle.map(x=>`<tr><td><strong>${esc(x.col)}${x.fila}</strong></td><td>${MESES[x.mes]}</td><td>${esc(x.tipo)}</td><td><strong>${esc(x.valor)}</strong></td><td>${esc(x.serie)||'—'}</td></tr>`).join('')}
+        </table>${state.meta.ignoradosDetalle.length>=150?'<small style="color:var(--gris-4)">Se muestran los primeros 150.</small>':''}
+      </div></details>`:'');
 }
 
 /* =====================================================================
