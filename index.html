@@ -342,8 +342,15 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
 <!-- ============ VISTA: PLAN DE MANTENIMIENTO ============ -->
 <section class="vista" id="vista-plan">
   <div class="card">
-    <h2>📅 Plan de Mantenimiento</h2>
-    <p class="sub">Una fila por evento de mantención (equipo y mes), uniendo la programación, la planilla y los registros de la app. Cada columna con filtros tipo Excel; presiona una fila para abrir la ficha del equipo.</p>
+    <div class="fila-flex" style="margin-bottom:4px">
+      <h2 style="margin:0">📅 Plan de Mantenimiento</h2>
+      <span style="flex:1"></span>
+      <div class="toggle-par" id="plan-modo" style="width:auto">
+        <button type="button" data-modo="lista" class="sel-azul">📋 Lista</button>
+        <button type="button" data-modo="gantt">📅 Carta Gantt</button>
+      </div>
+    </div>
+    <p class="sub" id="plan-sub">Una fila por evento de mantención (equipo y mes), uniendo la programación, la planilla y los registros de la app. Cada columna con filtros tipo Excel; presiona una fila para abrir la ficha del equipo.</p>
     <div class="fila-flex" style="margin-bottom:10px;font-size:.8rem;gap:8px">
       <span class="chip azul">X</span> Programada
       <span class="chip ambar">R</span> Reprogramada
@@ -361,6 +368,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
     <div class="barra-tabla">
       <div class="buscador"><input type="text" id="busqueda-plan" placeholder="Buscar en el plan…"></div>
       <button class="btn mini" id="btn-limpiar-plan" style="display:none">✕ Limpiar filtros</button>
+      <button class="btn mini" id="btn-cols-plan" title="Elegir qué columnas mostrar">⚙ Columnas</button>
       <span class="contador" id="contador-plan"></span>
       <span style="flex:1"></span>
       <button class="btn" id="btn-exportar-plan" title="Exporta las filas visibles según los filtros aplicados">⬇ Exportar vista</button>
@@ -371,7 +379,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
         <tbody id="tbody-plan"></tbody>
       </table>
     </div>
-    <div class="paginacion">
+    <div class="paginacion" id="plan-paginacion">
       <label>Filas por página
         <select id="plan-sel-pagina"><option>50</option><option selected>100</option><option>250</option><option value="all">Todas</option></select>
       </label>
@@ -848,7 +856,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-15.22';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-15.23';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -880,10 +888,14 @@ const CAMPOS_TABLA = CAMPOS.concat(CAMPOS_CALC);
 const COLS_EQ_DEFECTO = ['equipo','serie','inventario','servicio','ubicacion','_estado','_diasEstado','_actualizado','_pend'];
 /* Columnas de la vista Plan de Mantenimiento (una fila por evento de mantención) */
 const PLAN_COLS = [
-  {k:'equipo',l:'Equipo'},{k:'serie',l:'Serie'},{k:'inventario',l:'N° Inventario'},{k:'servicio',l:'Servicio'},
+  {k:'id',l:'ID'},{k:'carpeta',l:'N° Carpeta'},{k:'inventario',l:'N° Inventario'},{k:'equipo',l:'Equipo'},
+  {k:'servicio',l:'Servicio'},{k:'unidad',l:'Unidad'},{k:'ubicacion',l:'Ubicación'},{k:'procedencia',l:'Procedencia'},
+  {k:'marca',l:'Marca'},{k:'modelo',l:'Modelo'},{k:'serie',l:'Serie'},
   {k:'mes',l:'Mes'},{k:'programa',l:'Programa'},{k:'resultado',l:'Resultado'},{k:'fechaApp',l:'Fecha ejecución (app)'},
   {k:'registro',l:'Registro'},{k:'origen',l:'Origen'}
 ];
+/* columnas visibles por defecto en el Plan (evitan el desplazamiento horizontal) */
+const COLS_PLAN_DEFECTO = ['inventario','equipo','servicio','mes','programa','resultado','fechaApp','registro','origen'];
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const MESES_PMP_COLS = ['T','U','V','W','X','Y','Z','AA','AB','AC','AD','AE'];     // Paso 3
 const MESES_REG_COLS = [                                                          // Paso 4
@@ -1382,8 +1394,12 @@ function invalidar(){ cacheFiltradas=null; }
    VISTA PLAN DE MANTENIMIENTO — una fila por evento, todo filtrable
    ===================================================================== */
 let filtrosPlan={}, ordenPlan={k:null,dir:1}, busquedaPlan='', paginaPlan=0;
-let cachePlanBase=null, cachePlanFil=null, popColPlan=null;
-function invalidarPlan(){ cachePlanBase=null; cachePlanFil=null; }
+let cachePlanBase=null, cachePlanFil=null, popColPlan=null, planModo='lista';
+function colsPlanVisibles(){
+  const sel = (prefs.colsPlan && prefs.colsPlan.length) ? new Set(prefs.colsPlan) : new Set(COLS_PLAN_DEFECTO);
+  return PLAN_COLS.filter(c=>sel.has(c.k));
+}
+function invalidarPlan(){ cachePlanBase=null; cachePlanFil=null; cacheGantt=null; }
 function basePlan(){ if(!cachePlanBase) cachePlanBase=filasPlanBase(); return cachePlanBase; }
 function pasaBusquedaPlan(f){
   if(!busquedaPlan) return true;
@@ -1415,7 +1431,13 @@ function filasPlanVisibles(){
 function renderPlan(){
   const thead=$('#thead-plan');
   if(!thead) return;
-  thead.innerHTML = PLAN_COLS.map(c=>{
+  $('#plan-modo')&&$$('#plan-modo button').forEach(b=>b.className=b.dataset.modo===planModo?'sel-azul':'');
+  if(planModo==='gantt'){ renderPlanGantt(); return; }
+  $('#plan-paginacion').style.display='';
+  $('#btn-cols-plan').style.display='';
+  $('#plan-sub').textContent='Una fila por evento de mantención (equipo y mes), uniendo la programación, la planilla y los registros de la app. Cada columna con filtros tipo Excel; presiona una fila para abrir la ficha del equipo.';
+  const COLS=colsPlanVisibles();
+  thead.innerHTML = COLS.map(c=>{
     const filtrado=!!filtrosPlan[c.k];
     const flecha=ordenPlan.k===c.k?(ordenPlan.dir===1?' ▲':' ▼'):'';
     return `<th><div class="th-int"><span class="tit">${esc(c.l)}${flecha}</span>
@@ -1429,11 +1451,11 @@ function renderPlan(){
   const visibles=filas.slice(paginaPlan*tam, paginaPlan*tam+tam);
   const tbody=$('#tbody-plan');
   if(!basePlan().length){
-    tbody.innerHTML=`<tr><td colspan="${PLAN_COLS.length}"><div class="vacio">Sin eventos de mantención: carga la planilla en «Carga de Datos».</div></td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="${COLS.length}"><div class="vacio">Sin eventos de mantención: carga la planilla en «Carga de Datos».</div></td></tr>`;
   } else if(!filas.length){
-    tbody.innerHTML=`<tr><td colspan="${PLAN_COLS.length}"><div class="vacio">Ningún evento coincide con los filtros aplicados.</div></td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="${COLS.length}"><div class="vacio">Ningún evento coincide con los filtros aplicados.</div></td></tr>`;
   } else {
-    tbody.innerHTML=visibles.map(f=>`<tr data-key="${esc(f.key)}">`+PLAN_COLS.map(c=>{
+    tbody.innerHTML=visibles.map(f=>`<tr data-key="${esc(f.key)}">`+COLS.map(c=>{
       let v=f[c.k]||'';
       if(c.k==='programa') return `<td>${chipPrograma(v)||'—'}</td>`;
       if(c.k==='resultado') return `<td>${chipResultado(v)||'—'}</td>`;
@@ -1447,6 +1469,155 @@ function renderPlan(){
   $('#plan-prev').disabled=paginaPlan<=0;
   $('#plan-next').disabled=paginaPlan>=totalPag-1;
   $('#btn-limpiar-plan').style.display=(Object.keys(filtrosPlan).length||busquedaPlan||ordenPlan.k)?'':'none';
+}
+function abrirSelectorColumnasPlan(ancla){
+  const pop=$('#filtro-pop'); popCol=null; popColPlan=null; popColPend=null; popColCorr=null;
+  const visibles=new Set(colsPlanVisibles().map(c=>c.k));
+  pop.innerHTML=`<div class="fp-cab">Columnas visibles del Plan</div>
+    <div class="fp-lista" style="max-height:320px">${PLAN_COLS.map(c=>`<label><input type="checkbox" class="fp-colp" value="${c.k}" ${visibles.has(c.k)?'checked':''}> <span>${esc(c.l)}</span></label>`).join('')}</div>
+    <div class="fp-pie"><button class="defecto">Restablecer</button><button class="ok">Aplicar</button></div>`;
+  const rect=ancla.getBoundingClientRect();
+  pop.style.display='block';
+  let x=rect.left+window.scrollX;
+  if(x+270 > window.scrollX+document.documentElement.clientWidth-10) x=window.scrollX+document.documentElement.clientWidth-280;
+  pop.style.left=x+'px'; pop.style.top=(rect.bottom+window.scrollY+6)+'px';
+  pop.querySelector('.defecto').addEventListener('click',()=>{ delete prefs.colsPlan; guardarPrefs(); renderPlan(); cerrarPopover(); toast('Columnas del Plan restablecidas.'); });
+  pop.querySelector('.ok').addEventListener('click',()=>{
+    const sel=[...pop.querySelectorAll('.fp-colp')].filter(c=>c.checked).map(c=>c.value);
+    if(!sel.length){ toast('⚠️ Selecciona al menos una columna.'); return; }
+    prefs.colsPlan=sel; guardarPrefs(); renderPlan(); cerrarPopover();
+  });
+}
+
+/* ---------- Plan de Mantenimiento · Carta Gantt (una fila por equipo) ---------- */
+let filtrosGantt={}, busquedaGantt='', popColGantt=null;
+const GANTT_IDCOLS=[
+  {k:'inventario',l:'N° Inventario'},{k:'equipo',l:'Equipo'},{k:'serie',l:'Serie'},{k:'servicio',l:'Servicio'},
+  {k:'registro',l:'Registro'},{k:'actualizado',l:'Última actualización'}
+];
+let cacheGantt=null;
+function baseGantt(){
+  if(cacheGantt) return cacheGantt;
+  const regMap={}; state.registros.forEach(r=>{ regMap[r.equipoKey+'|'+r.mes]=r; });
+  const appMap={}; state.manuales.forEach(m=>{
+    if(m.fecha&&m.fecha.startsWith('2026')){ const k=m.equipoKey+'|'+(parseInt(m.fecha.slice(5,7),10)-1); (appMap[k]=appMap[k]||[]).push(m); }
+  });
+  Object.values(appMap).forEach(l=>l.sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'')));
+  cacheGantt=state.equipos.filter(e=>{
+    if(e.prog&&Object.keys(e.prog).length) return true;
+    for(let m=0;m<12;m++) if(regMap[e.key+'|'+m]||appMap[e.key+'|'+m]) return true;
+    return false;
+  }).map(e=>{
+    const meses=[]; let hayBorrador=false, hayResultado=false;
+    for(let m=0;m<12;m++){
+      const r=regMap[e.key+'|'+m]||null;
+      const apps=appMap[e.key+'|'+m]||[];
+      const ap=apps.length?apps[apps.length-1]:null;
+      const programa=(r&&r.programa)||(e.prog&&e.prog[m])||(ap&&ap.programacion)||'';
+      const resultado=(r&&r.resultado)||(ap&&ap.resultado)||'';
+      if(resultado) hayResultado=true;
+      if(ap && !(r&&r.resultado) && (ap.tipoRegistro||'Borrador')==='Borrador' && resultado) hayBorrador=true;
+      meses.push({programa,resultado});
+    }
+    return { key:e.key, id:e.id||'', carpeta:e.carpeta||'', inventario:e.inventario||'', equipo:e.equipo||'',
+      servicio:e.servicio||'', unidad:e.unidad||'', ubicacion:e.ubicacion||'', procedencia:e.procedencia||'',
+      marca:e.marca||'', modelo:e.modelo||'', serie:e.serie||'',
+      meses, registro: hayBorrador?'Borrador':(hayResultado?'Oficial':'—'),
+      actualizado: ultimaActualizacionEquipo(e.key) };
+  });
+  return cacheGantt;
+}
+function invalidarGantt(){ cacheGantt=null; }
+function pasaBusquedaGantt(f){
+  if(!busquedaGantt) return true;
+  const b=sinAcentos(busquedaGantt).toLowerCase();
+  return ['inventario','equipo','serie','servicio','unidad','ubicacion','marca','modelo','id','carpeta'].some(k=>sinAcentos(f[k]||'').toLowerCase().includes(b));
+}
+function filasGanttFiltradas(excluir){
+  return baseGantt().filter(f=>
+    pasaBusquedaGantt(f) &&
+    GANTT_IDCOLS.every(c=>c.k===excluir || !filtrosGantt[c.k] || filtrosGantt[c.k].has(f[c.k]||''))
+  );
+}
+function renderPlanGantt(){
+  $('#plan-paginacion').style.display='none';
+  $('#btn-cols-plan').style.display='none';
+  $('#plan-sub').textContent='Carta Gantt: una fila por equipo y los 12 meses con su programación y resultado. Filtra por columna (tipo Excel) en los datos del equipo, el registro y la última actualización.';
+  const filas=filasGanttFiltradas(null);
+  const thMes=MESES.map(m=>`<th style="text-align:center"><div class="th-int" style="justify-content:center"><span class="tit">${m.slice(0,3)}</span></div></th>`).join('');
+  /* cabecera: 4 columnas de identificación con filtro, los 12 meses, y Registro + Última actualización con filtro */
+  const idHead = GANTT_IDCOLS.slice(0,4).map(c=>{
+    const filtrado=!!filtrosGantt[c.k];
+    return `<th><div class="th-int"><span class="tit">${esc(c.l)}</span><button class="btn-filtro ${filtrado?'activo':''}" data-gantt-col="${c.k}" title="Filtrar">${filtrado?'⏷✓':'⏷'}</button></div></th>`;
+  }).join('');
+  const regHead=['registro','actualizado'].map(k=>{
+    const c=GANTT_IDCOLS.find(x=>x.k===k); const filtrado=!!filtrosGantt[k];
+    return `<th><div class="th-int"><span class="tit">${esc(c.l)}</span><button class="btn-filtro ${filtrado?'activo':''}" data-gantt-col="${k}" title="Filtrar">${filtrado?'⏷✓':'⏷'}</button></div></th>`;
+  }).join('');
+  $('#thead-plan').innerHTML = idHead + thMes + regHead;
+  const tbody=$('#tbody-plan');
+  if(!baseGantt().length){ tbody.innerHTML=`<tr><td colspan="18"><div class="vacio">Sin programación cargada.</div></td></tr>`; }
+  else if(!filas.length){ tbody.innerHTML=`<tr><td colspan="18"><div class="vacio">Ningún equipo coincide con los filtros.</div></td></tr>`; }
+  else {
+    tbody.innerHTML=filas.map(f=>{
+      const celdasMes=f.meses.map(mm=>{
+        if(!mm.programa&&!mm.resultado) return '<td style="text-align:center;color:var(--gris-3)">·</td>';
+        const p=mm.programa?chipPrograma(mm.programa):'';
+        const r=mm.resultado?chipResultado(mm.resultado):'';
+        return `<td style="text-align:center;white-space:nowrap;background:var(--azul-claro)">${p}${p&&r?'<br>':''}${r}</td>`;
+      }).join('');
+      return `<tr data-key="${esc(f.key)}" style="cursor:pointer">
+        <td title="${esc(f.inventario)}">${esc(f.inventario)||'—'}</td>
+        <td style="max-width:180px"><strong>${esc(f.equipo)}</strong></td>
+        <td title="${esc(f.serie)}">${esc(f.serie)||'—'}</td>
+        <td title="${esc(f.servicio)}">${esc(f.servicio)||'—'}</td>
+        ${celdasMes}
+        <td>${f.registro==='Oficial'?'<span class="chip verde">Oficial</span>':f.registro==='Borrador'?'<span class="chip ambar">Borrador</span>':'—'}</td>
+        <td>${f.actualizado?fmtFecha(f.actualizado):'—'}</td></tr>`;
+    }).join('');
+  }
+  $('#contador-plan').textContent=`Mostrando ${filas.length} de ${baseGantt().length} equipos`;
+  $('#btn-limpiar-plan').style.display=(Object.keys(filtrosGantt).length||busquedaGantt)?'':'none';
+}
+function abrirPopoverGantt(colKey, ancla){
+  const pop=$('#filtro-pop'); popColGantt=colKey; popCol=null; popColPlan=null; popColPend=null; popColCorr=null;
+  const campo=GANTT_IDCOLS.find(c=>c.k===colKey);
+  const baseF=filasGanttFiltradas(colKey);
+  const conteo=new Map();
+  baseF.forEach(f=>{ const v=f[colKey]||''; conteo.set(v,(conteo.get(v)||0)+1); });
+  let valores=[...conteo.keys()].sort((a,b)=>String(a).localeCompare(String(b),'es',{numeric:true,sensitivity:'base'}));
+  const LIM=600, recortado=valores.length>LIM; if(recortado) valores=valores.slice(0,LIM);
+  const sel=filtrosGantt[colKey];
+  pop.innerHTML=`
+    <div class="fp-cab">Filtro: ${esc(campo.l)}</div>
+    <input class="fp-buscar" type="text" placeholder="Buscar valores…">
+    <div class="fp-lista">
+      <label><input type="checkbox" class="fp-todos" ${!sel?'checked':''}> <strong>(Seleccionar todo)</strong></label>
+      ${valores.map(v=>`<label data-v="${esc(v)}"><input type="checkbox" class="fp-val" value="${esc(v)}" ${(!sel||sel.has(v))?'checked':''}> <span>${v===''?'<em>(Vacías)</em>':esc(v)}</span><span class="cnt">${conteo.get(v)}</span></label>`).join('')}
+      ${recortado?`<div class="vacio" style="padding:8px">Primeros ${LIM} valores; usa la búsqueda.</div>`:''}
+    </div>
+    <div class="fp-pie"><button class="limpiar">Limpiar filtro</button><button class="ok">Aplicar</button></div>`;
+  const rect=ancla.getBoundingClientRect();
+  pop.style.display='block';
+  let x=rect.left+window.scrollX;
+  if(x+270 > window.scrollX+document.documentElement.clientWidth-10) x=window.scrollX+document.documentElement.clientWidth-280;
+  pop.style.left=x+'px'; pop.style.top=(rect.bottom+window.scrollY+6)+'px';
+  pop.querySelector('.fp-buscar').addEventListener('input', ev=>{
+    const b=sinAcentos(ev.target.value).toLowerCase();
+    pop.querySelectorAll('.fp-lista label[data-v]').forEach(l=>{ l.style.display=sinAcentos(l.dataset.v).toLowerCase().includes(b)?'':'none'; });
+  });
+  pop.querySelector('.fp-todos').addEventListener('change', ev=>{
+    pop.querySelectorAll('.fp-val').forEach(ch=>{ if(ch.closest('label').style.display!=='none') ch.checked=ev.target.checked; });
+  });
+  pop.querySelector('.limpiar').addEventListener('click',()=>{ delete filtrosGantt[colKey]; renderPlanGantt(); cerrarPopover(); });
+  pop.querySelector('.ok').addEventListener('click',()=>{
+    const marcados=[...pop.querySelectorAll('.fp-val')].filter(ch=>ch.checked).map(ch=>ch.value);
+    const todos=pop.querySelectorAll('.fp-val').length;
+    if(marcados.length===todos && !recortado) delete filtrosGantt[colKey];
+    else filtrosGantt[colKey]=new Set(marcados);
+    grabEvento({e:'filtro', tabla:'gantt', col:colKey, seleccionados:marcados.length});
+    renderPlanGantt(); cerrarPopover();
+  });
 }
 function abrirPopoverPlan(colKey, ancla){
   const pop=$('#filtro-pop');
@@ -1502,13 +1673,32 @@ function abrirPopoverPlan(colKey, ancla){
 }
 function exportarPlan(){
   if(typeof XLSX==='undefined'){ toast('Librería XLSX no disponible.'); return; }
+  const COLS=colsPlanVisibles();
   const filas=filasPlanVisibles();
   if(!filas.length){ toast('No hay filas para exportar.'); return; }
-  const aoa=[PLAN_COLS.map(c=>c.l), ...filas.map(f=>PLAN_COLS.map(c=>String(c.k==='fechaApp'&&f[c.k]?fmtFecha(f[c.k]):(f[c.k]||''))))];
+  const aoa=[COLS.map(c=>c.l), ...filas.map(f=>COLS.map(c=>String(c.k==='fechaApp'&&f[c.k]?fmtFecha(f[c.k]):(f[c.k]||''))))];
   const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, hojaTexto(aoa, PLAN_COLS.map(c=>({wch:Math.max(c.l.length+2,12)}))), 'Plan');
+  XLSX.utils.book_append_sheet(wb, hojaTexto(aoa, COLS.map(c=>({wch:Math.max(c.l.length+2,12)}))), 'Plan');
   XLSX.writeFile(wb, 'Plan_GMP2026_'+hoyISO()+'.xlsx');
   toast('⬇ Exportados '+filas.length+' eventos del plan.');
+}
+function exportarGantt(){
+  if(typeof XLSX==='undefined'){ toast('Librería XLSX no disponible.'); return; }
+  const filas=filasGanttFiltradas(null);
+  if(!filas.length){ toast('No hay filas para exportar.'); return; }
+  const cab=['N° Inventario','Equipo','Serie','Servicio'];
+  MESES.forEach(m=>{ cab.push(m.slice(0,3)+' Prog'); cab.push(m.slice(0,3)+' Result'); });
+  cab.push('Registro','Última actualización');
+  const aoa=[cab, ...filas.map(f=>{
+    const fila=[f.inventario,f.equipo,f.serie,f.servicio];
+    f.meses.forEach(mm=>{ fila.push(mm.programa||''); fila.push(mm.resultado||''); });
+    fila.push(f.registro, f.actualizado?fmtFecha(f.actualizado):'');
+    return fila.map(x=>String(x||''));
+  })];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, hojaTexto(aoa), 'Carta Gantt');
+  XLSX.writeFile(wb, 'CartaGantt_GMP2026_'+hoyISO()+'.xlsx');
+  toast('⬇ Exportada carta Gantt: '+filas.length+' equipos.');
 }
 
 function colsEquiposVisibles(){
@@ -1615,7 +1805,7 @@ function abrirPopover(colKey, ancla){
     pagina=0; invalidar(); renderTabla(); cerrarPopover();
   });
 }
-function cerrarPopover(){ $('#filtro-pop').style.display='none'; popCol=null; popColPlan=null; popColPend=null; popColCorr=null; }
+function cerrarPopover(){ $('#filtro-pop').style.display='none'; popCol=null; popColPlan=null; popColPend=null; popColCorr=null; popColGantt=null; }
 function abrirSelectorColumnas(ancla){
   const pop=$('#filtro-pop'); popCol=null; popColPlan=null;
   const visibles=new Set(colsEquiposVisibles().map(c=>c.k));
@@ -2288,6 +2478,7 @@ function filasPlanBase(){
       const programa=(r&&r.programa)||(e.prog&&e.prog[m])||(ap&&ap.programacion)||'';
       const resultado=(r&&r.resultado)||(ap&&ap.resultado)||'';
       rows.push({ key:e.key, equipo:e.equipo||'', serie:e.serie||'', inventario:e.inventario||'', servicio:e.servicio||'',
+        id:e.id||'', carpeta:e.carpeta||'', unidad:e.unidad||'', ubicacion:e.ubicacion||'', procedencia:e.procedencia||'', marca:e.marca||'', modelo:e.modelo||'',
         mes:MESES[m], mesIdx:m, programa, resultado, fechaApp:ap?(ap.fecha||''):'',
         registro:(r&&r.resultado)?'Oficial':(ap?(ap.tipoRegistro||'Borrador'):'Oficial'),
         origen: r&&ap?'Planilla + App':(r?'Planilla':(ap?'App':'Planilla')) });
@@ -3379,17 +3570,29 @@ function conectarEventos(){
   });
 
   /* Plan de Mantenimiento */
-  $('#busqueda-plan').addEventListener('input', debounce(()=>{ busquedaPlan=$('#busqueda-plan').value; paginaPlan=0; cachePlanFil=null; renderPlan(); },180));
-  $('#btn-limpiar-plan').addEventListener('click',()=>{
-    filtrosPlan={}; ordenPlan={k:null,dir:1}; busquedaPlan=''; $('#busqueda-plan').value=''; paginaPlan=0; cachePlanFil=null; renderPlan();
+  $('#plan-modo').addEventListener('click',ev=>{
+    const b=ev.target.closest('button'); if(!b) return;
+    planModo=b.dataset.modo; grabEvento({e:'planModo', modo:planModo}); renderPlan();
   });
-  $('#btn-exportar-plan').addEventListener('click',exportarPlan);
+  $('#busqueda-plan').addEventListener('input', debounce(()=>{
+    if(planModo==='gantt'){ busquedaGantt=$('#busqueda-plan').value; renderPlanGantt(); }
+    else { busquedaPlan=$('#busqueda-plan').value; paginaPlan=0; cachePlanFil=null; renderPlan(); }
+  },180));
+  $('#btn-limpiar-plan').addEventListener('click',()=>{
+    if(planModo==='gantt'){ filtrosGantt={}; busquedaGantt=''; $('#busqueda-plan').value=''; renderPlanGantt(); }
+    else { filtrosPlan={}; ordenPlan={k:null,dir:1}; busquedaPlan=''; $('#busqueda-plan').value=''; paginaPlan=0; cachePlanFil=null; renderPlan(); }
+  });
+  $('#btn-cols-plan').addEventListener('click',ev=>{ ev.stopPropagation(); abrirSelectorColumnasPlan(ev.currentTarget); });
+  $('#btn-exportar-plan').addEventListener('click',()=>planModo==='gantt'?exportarGantt():exportarPlan());
   $('#plan-sel-pagina').addEventListener('change',()=>{ paginaPlan=0; renderPlan(); });
   $('#plan-prev').addEventListener('click',()=>{ paginaPlan--; renderPlan(); });
   $('#plan-next').addEventListener('click',()=>{ paginaPlan++; renderPlan(); });
   $('#thead-plan').addEventListener('click',ev=>{
     const b=ev.target.closest('.btn-filtro');
-    if(b){ ev.stopPropagation(); (popColPlan===b.dataset.planCol)?cerrarPopover():abrirPopoverPlan(b.dataset.planCol,b); }
+    if(!b){ ev.stopPropagation&&0; return; }
+    ev.stopPropagation();
+    if(b.dataset.ganttCol!==undefined){ (popColGantt===b.dataset.ganttCol)?cerrarPopover():abrirPopoverGantt(b.dataset.ganttCol,b); }
+    else { (popColPlan===b.dataset.planCol)?cerrarPopover():abrirPopoverPlan(b.dataset.planCol,b); }
   });
   $('#tbody-plan').addEventListener('click',ev=>{
     const tr=ev.target.closest('tr[data-key]');
