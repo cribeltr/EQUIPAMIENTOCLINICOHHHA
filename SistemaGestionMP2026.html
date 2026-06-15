@@ -849,7 +849,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-13.19';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-15.20';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -2763,7 +2763,7 @@ function tablaPendientes(lista){
     ${filas}</table></div>`;
 }
 const PEND_COLS=[
-  {k:'equipo',l:'Equipo'},{k:'serie',l:'Serie'},{k:'tipo',l:'Tipo'},
+  {k:'equipo',l:'Equipo'},{k:'serie',l:'Serie'},{k:'inventario',l:'N° Inventario'},{k:'servicio',l:'Servicio'},{k:'tipo',l:'Tipo'},
   {k:'urgencia',l:'Urgencia'},{k:'estadoG',l:'Estado'},
   {k:'compromiso',l:'Compromiso'},{k:'atraso',l:'Días atraso'},{k:'tareas',l:'Tareas'},
   {k:'respAdmin',l:'Resp. Adm'},{k:'respEjec',l:'Resp. Eje'},
@@ -2798,7 +2798,7 @@ function filasPendBase(){
     const venc = p.estado!=='Completado' && !p.esperaDe && p.fechaCompromiso && p.fechaCompromiso<hoy;
     const ult=(p.gestiones&&p.gestiones.length)?p.gestiones[p.gestiones.length-1]:null;
     return { id:p.id, key:p.equipoKey, p,
-      equipo:e?e.equipo:p.equipoKey, serie:e?e.serie:'', tipo:p.tipo||'',
+      equipo:e?e.equipo:p.equipoKey, serie:e?e.serie:'', inventario:e?e.inventario:'', servicio:e?e.servicio:'', tipo:p.tipo||'',
       urgencia:urg, estadoG:estadoGestionPendiente(p),
       compromiso:p.fechaCompromiso||'', atraso:venc?String(diasEntre(p.fechaCompromiso,hoy)):'',
       tareas:(p.tareas&&p.tareas.length)?(p.tareas.filter(t=>t.hecha).length+'/'+p.tareas.length):'',
