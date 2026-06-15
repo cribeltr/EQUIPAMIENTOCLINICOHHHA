@@ -849,7 +849,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-15.20';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-15.21';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -1975,16 +1975,34 @@ function guardarMP(){
     gestionPendiente:$('#mp-gestion').checked,
     tipoRegistro:valToggle('mp-tipo')||'Borrador'
   };
-  if(mpEditando){ Object.assign(mpEditando, datos, {actualizado:hoyISO()}); toast('✅ Mantención actualizada.'); }
-  else { state.manuales.push(Object.assign({id:uid(), creado:hoyISO()}, datos)); toast('✅ Mantención guardada ('+datos.tipoRegistro+').'); }
+  let mp;
+  if(mpEditando){ Object.assign(mpEditando, datos, {actualizado:hoyISO()}); mp=mpEditando; toast('✅ Mantención actualizada.'); }
+  else { mp=Object.assign({id:uid(), creado:hoyISO()}, datos); state.manuales.push(mp); toast('✅ Mantención guardada ('+datos.tipoRegistro+').'); }
   prefs.ultimaFechaMP=fecha; prefs.ultimoEjecutor=ejec; guardarPrefs();
+  /* Gestión pendiente marcada → generar el pendiente vinculado a esta MP (si no existe ya) */
+  let pendienteNuevo=null;
+  if(datos.gestionPendiente && !state.pendientes.some(p=>p.origenMP===mp.id)){
+    pendienteNuevo=generarPendienteDesdeMP(mp);
+    state.pendientes.push(pendienteNuevo);
+  }
   guardar(); cerrarModal('modal-mp'); renderTodo();
-  /* Si quedó una gestión pendiente, abrir de inmediato el formulario de Pendientes */
-  if(datos.gestionPendiente && !mpEditando){
-    const prefTipo = /^C[1-8]$/.test(res) ? 'Reprogramación Mantención Preventiva' : '';
-    abrirModalPendiente(equipoKey, null, {tipo:prefTipo, descripcion:`Asociado a MP del ${fmtFecha(fecha)} (resultado ${res}).`});
+  if(pendienteNuevo){
+    toast('✅ Pendiente generado por la gestión pendiente.');
+    abrirModalPendiente(pendienteNuevo.equipoKey, pendienteNuevo, null);   /* abrir para enriquecer; ya quedó creado */
   }
   mpEditando=null;
+}
+function generarPendienteDesdeMP(m){
+  const esCausal=/^C[1-8]$/.test(m.resultado);
+  const REPRO30=['C1','C5','C6','C7','C8'];
+  const compromiso = REPRO30.includes(m.resultado) ? sumarDias(m.fecha,30) : sumarDias(hoyISO(),7);
+  return { id:uid(), creado:hoyISO(), origenMP:m.id,
+    equipoKey:m.equipoKey, fechaCompromiso:compromiso,
+    tipo: esCausal ? 'Reprogramación Mantención Preventiva' : 'Otro',
+    descripcion:`Generado por MP del ${fmtFecha(m.fecha)} (resultado ${m.resultado}).`+(m.observaciones?' '+m.observaciones:''),
+    tareas:[], respAdmin:RESP_ADM_DEFECTO, respEjec:prefs.ultimoRespEje||'',
+    gestiones:[{fecha:new Date().toLocaleString('es-CL'), texto:'Generado automáticamente por la gestión pendiente de la mantención preventiva.'}],
+    estado:'Abierto', fechaCompletado:'', esperaDe:'' };
 }
 
 /* =====================================================================
@@ -2723,13 +2741,24 @@ function guardarOT(){
     estadoEvento, fechaCierre,
     gestionPendiente:$('#ot-gestion').checked,
     tipoRegistro:valToggle('ot-tipo-reg')||'Oficial' };
-  const esNuevo = !otEditando;
-  if(otEditando){ delete otEditando.tipoDocumento; Object.assign(otEditando, datos, {actualizado:hoyISO()}); toast('✅ Evento actualizado.'); }
-  else { state.correctivos.push(Object.assign({id:uid(), creado:hoyISO()}, datos)); toast('✅ '+tipoEvento+' guardado ('+datos.tipoRegistro+').'); }
+  let oc;
+  if(otEditando){ delete otEditando.tipoDocumento; Object.assign(otEditando, datos, {actualizado:hoyISO()}); oc=otEditando; toast('✅ Evento actualizado.'); }
+  else { oc=Object.assign({id:uid(), creado:hoyISO()}, datos); state.correctivos.push(oc); toast('✅ '+tipoEvento+' guardado ('+datos.tipoRegistro+').'); }
+  /* Gestión pendiente marcada → generar el pendiente vinculado a este evento correctivo (si no existe ya) */
+  let pendienteNuevo=null;
+  if(datos.gestionPendiente && !state.pendientes.some(p=>p.origenOT===oc.id)){
+    pendienteNuevo={ id:uid(), creado:hoyISO(), origenOT:oc.id,
+      equipoKey, fechaCompromiso:sumarDias(hoyISO(),7), tipo:'Otro',
+      descripcion:`Generado por ${tipoEvento} folio ${folio} del ${fmtFecha(fecha)}.`+(datos.requerimiento?' '+datos.requerimiento:''),
+      tareas:[], respAdmin:RESP_ADM_DEFECTO, respEjec:prefs.ultimoRespEje||'',
+      gestiones:[{fecha:new Date().toLocaleString('es-CL'), texto:'Generado automáticamente por la gestión pendiente del evento correctivo.'}],
+      estado:'Abierto', fechaCompletado:'', esperaDe:'' };
+    state.pendientes.push(pendienteNuevo);
+  }
   guardar(); cerrarModal('modal-ot'); otEditando=null; renderTodo();
-  /* Si quedó una gestión pendiente, abrir de inmediato el formulario de Pendientes */
-  if(datos.gestionPendiente && esNuevo){
-    abrirModalPendiente(equipoKey, null, {tipo:'Otro', descripcion:`Asociado a ${tipoEvento} folio ${folio} del ${fmtFecha(fecha)}.`});
+  if(pendienteNuevo){
+    toast('✅ Pendiente generado por la gestión pendiente.');
+    abrirModalPendiente(pendienteNuevo.equipoKey, pendienteNuevo, null);
   }
 }
 function eliminarOT(){
