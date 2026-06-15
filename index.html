@@ -862,7 +862,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-15.24';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-15.25';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -1540,10 +1540,16 @@ function pasaBusquedaGantt(f){
   const b=sinAcentos(busquedaGantt).toLowerCase();
   return ['inventario','equipo','serie','servicio','unidad','ubicacion','marca','modelo','id','carpeta'].some(k=>sinAcentos(f[k]||'').toLowerCase().includes(b));
 }
+function valorGanttCol(f, colKey){
+  if(colKey.startsWith('prog_')){ const m=+colKey.slice(5); return (f.meses[m]&&f.meses[m].programa)||''; }
+  if(colKey.startsWith('result_')){ const m=+colKey.slice(7); return (f.meses[m]&&f.meses[m].resultado)||''; }
+  return f[colKey]||'';
+}
 function filasGanttFiltradas(excluir){
+  const keys=Object.keys(filtrosGantt);
   return baseGantt().filter(f=>
     pasaBusquedaGantt(f) &&
-    GANTT_IDCOLS.every(c=>c.k===excluir || !filtrosGantt[c.k] || filtrosGantt[c.k].has(f[c.k]||''))
+    keys.every(k=> k===excluir || !filtrosGantt[k] || filtrosGantt[k].has(valorGanttCol(f,k)))
   );
 }
 function renderPlanGantt(){
@@ -1562,7 +1568,10 @@ function renderPlanGantt(){
     const filtrado=!!filtrosGantt[k];
     return `<th rowspan="2"><div class="th-int"><span class="tit">${esc(l)}</span><button class="btn-filtro ${filtrado?'activo':''}" data-gantt-col="${k}" title="Filtrar">${filtrado?'⏷✓':'⏷'}</button></div></th>`;
   }).join('');
-  const subTh=MESES.map(()=>'<th class="g-sub g-ini">Prog</th><th class="g-sub">Result</th>').join('');
+  const subTh=MESES.map((m,i)=>{
+    const fP=!!filtrosGantt['prog_'+i], fR=!!filtrosGantt['result_'+i];
+    return `<th class="g-sub g-ini"><div class="th-int" style="justify-content:center;gap:3px"><span class="tit">Prog</span><button class="btn-filtro ${fP?'activo':''}" data-gantt-col="prog_${i}" title="Filtrar programa de ${m}">${fP?'⏷✓':'⏷'}</button></div></th><th class="g-sub"><div class="th-int" style="justify-content:center;gap:3px"><span class="tit">Result</span><button class="btn-filtro ${fR?'activo':''}" data-gantt-col="result_${i}" title="Filtrar resultado de ${m}">${fR?'⏷✓':'⏷'}</button></div></th>`;
+  }).join('');
   $('#thead-plan-wrap').innerHTML = `<tr>${idTh}${mesTh}${regTh}</tr><tr>${subTh}</tr>`;
   const totalCols=4+24+2;
   const tbody=$('#tbody-plan');
@@ -1591,10 +1600,14 @@ function renderPlanGantt(){
 }
 function abrirPopoverGantt(colKey, ancla){
   const pop=$('#filtro-pop'); popColGantt=colKey; popCol=null; popColPlan=null; popColPend=null; popColCorr=null;
-  const campo=GANTT_IDCOLS.find(c=>c.k===colKey);
+  let etiqueta;
+  if(colKey.startsWith('prog_')) etiqueta='Programa · '+MESES[+colKey.slice(5)];
+  else if(colKey.startsWith('result_')) etiqueta='Resultado · '+MESES[+colKey.slice(7)];
+  else etiqueta=(GANTT_IDCOLS.find(c=>c.k===colKey)||{l:colKey}).l;
+  const campo={l:etiqueta};
   const baseF=filasGanttFiltradas(colKey);
   const conteo=new Map();
-  baseF.forEach(f=>{ const v=f[colKey]||''; conteo.set(v,(conteo.get(v)||0)+1); });
+  baseF.forEach(f=>{ const v=valorGanttCol(f,colKey); conteo.set(v,(conteo.get(v)||0)+1); });
   let valores=[...conteo.keys()].sort((a,b)=>String(a).localeCompare(String(b),'es',{numeric:true,sensitivity:'base'}));
   const LIM=600, recortado=valores.length>LIM; if(recortado) valores=valores.slice(0,LIM);
   const sel=filtrosGantt[colKey];
