@@ -253,6 +253,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
     <button data-vista="equipos">🛠 Equipos <span class="nbadge" id="badge-equipos" style="display:none"></span></button>
     <button data-vista="plan">📅 Plan de Mantenimiento</button>
     <button data-vista="pendientes">📋 Pendientes <span class="nbadge" id="badge-pend" style="display:none"></span></button>
+    <button data-vista="correctivos">🔩 Correctivos <span class="nbadge" id="badge-corr" style="display:none"></span></button>
     <button data-vista="operatividad">🩺 Operatividad <span class="nbadge" id="badge-oper" style="display:none"></span></button>
     <button data-vista="codigos">📖 Códigos y Reglas</button>
     <button id="btn-grabar" class="grabar" title="Graba localmente tus interacciones (clics, escritura, tiempos) y exporta un archivo para análisis de mejoras. Nada sale de este computador.">🔴 Grabar</button>
@@ -434,6 +435,28 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
       <table class="equipos">
         <thead><tr id="thead-pend"></tr></thead>
         <tbody id="tbody-pend"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============ VISTA: CORRECTIVOS ============ -->
+<section class="vista" id="vista-correctivos">
+  <div class="card">
+    <h2>🔩 Mantenimiento Correctivo</h2>
+    <p class="sub">Una fila por expediente (folio SIGEM), uniendo la orden de trabajo con sus avances. Cada columna con filtros tipo Excel; presiona una fila para abrir la ficha del equipo.</p>
+    <div class="fila-flex" style="margin-bottom:10px" id="corr-metricas"></div>
+    <div class="barra-tabla">
+      <div class="buscador"><input type="text" id="busqueda-corr" placeholder="Buscar en correctivos…"></div>
+      <button class="btn mini" id="btn-limpiar-corr" style="display:none">✕ Limpiar filtros</button>
+      <span class="contador" id="contador-corr"></span>
+      <span style="flex:1"></span>
+      <button class="btn" id="btn-exportar-corr" title="Exporta las filas visibles según los filtros aplicados">⬇ Exportar vista</button>
+    </div>
+    <div class="envoltura-tabla">
+      <table class="equipos">
+        <thead><tr id="thead-corr"></tr></thead>
+        <tbody id="tbody-corr"></tbody>
       </table>
     </div>
   </div>
@@ -825,7 +848,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-15.21';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-15.22';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -1185,13 +1208,14 @@ function mostrarVista(id){
   cerrarPopover();
   if(id==='equipos') renderTabla();
   if(id==='plan') renderPlan();
+  if(id==='correctivos') renderCorrectivos();
   if(id==='pendientes') renderPendientes();
   if(id==='operatividad') renderOperatividad();
   window.scrollTo({top:0});
 }
 function renderTodo(){
   calcularDerivadosEquipos(); invalidar(); invalidarPlan();
-  renderResumen(); renderTabla(); renderPlan(); renderPendientes(); renderOperatividad(); renderBadges();
+  renderResumen(); renderTabla(); renderPlan(); renderPendientes(); renderCorrectivos(); renderOperatividad(); renderBadges();
   if(detalleKey) renderDetalle(detalleKey);
 }
 function renderBadges(){
@@ -1202,6 +1226,9 @@ function renderBadges(){
   const bP=$('#badge-pend');
   bP.style.display = abiertos?'':'none';
   bP.textContent = abiertos;
+  const nCorrAb = expedientesDe(state.correctivos).map(nodosExpediente).filter(x=>!x.cerrado).length;
+  const bC=$('#badge-corr');
+  if(bC){ bC.style.display=nCorrAb?'':'none'; bC.textContent=nCorrAb; }
   const nOper = tableroOperatividad().length;
   const bO=$('#badge-oper');
   bO.style.display = nOper?'':'none';
@@ -1588,7 +1615,7 @@ function abrirPopover(colKey, ancla){
     pagina=0; invalidar(); renderTabla(); cerrarPopover();
   });
 }
-function cerrarPopover(){ $('#filtro-pop').style.display='none'; popCol=null; popColPlan=null; popColPend=null; }
+function cerrarPopover(){ $('#filtro-pop').style.display='none'; popCol=null; popColPlan=null; popColPend=null; popColCorr=null; }
 function abrirSelectorColumnas(ancla){
   const pop=$('#filtro-pop'); popCol=null; popColPlan=null;
   const visibles=new Set(colsEquiposVisibles().map(c=>c.k));
@@ -2951,6 +2978,166 @@ function exportarPendientesVista(){
   XLSX.writeFile(wb, 'Pendientes_GMP2026_'+hoyISO()+'.xlsx');
   toast('⬇ Exportados '+filas.length+' pendientes.');
 }
+
+/* =====================================================================
+   VISTA CORRECTIVOS — una fila por expediente, tabla tipo Excel
+   ===================================================================== */
+const CORR_COLS=[
+  {k:'id',l:'ID'},{k:'equipo',l:'Equipo'},{k:'tipo',l:'Tipo'},{k:'folio',l:'Folio SIGEM'},
+  {k:'fechaDoc',l:'Fecha Doc.'},{k:'tecnico',l:'Técnico'},{k:'empresa',l:'Empresa'},
+  {k:'estado',l:'Estado'},{k:'diasCiclo',l:'Días ciclo'}
+];
+let filtrosCorr={}, ordenCorr={k:null,dir:1}, busquedaCorr='', popColCorr=null;
+function filasCorrBase(){
+  const hoy=hoyISO();
+  const exps=expedientesDe(state.correctivos).map(nodosExpediente);
+  /* ID correlativo estable por fecha de apertura del expediente */
+  const orden=exps.slice().sort((a,b)=>(a.ot.fechaDocumento||'').localeCompare(b.ot.fechaDocumento||'')||(a.folio||'').localeCompare(b.folio||''));
+  const idMap=new Map(); orden.forEach((x,i)=>idMap.set(x.ot.id, i+1));
+  return exps.map(x=>{
+    const e=equipoPorKey(x.ot.equipoKey);
+    const ape=x.ot.fechaDocumento||'';
+    const cierre=x.cerrado?(x.ot.fechaCierre||''):'';
+    const diasCiclo = ape ? diasEntre(ape, cierre||hoy) : 0;
+    let empresa=x.ot.empresa||'';
+    (x.ot.avances||[]).forEach(a=>{ if(a.empresa) empresa=a.empresa; });
+    state.correctivos.filter(c=>c!==x.ot && (c.folioSigem||'').trim()===(x.folio||'').trim() && c.empresa).forEach(c=>{ empresa=c.empresa||empresa; });
+    return {
+      idExp:x.ot.id, key:x.ot.equipoKey, x,
+      id:String(idMap.get(x.ot.id)||0).padStart(3,'0'),
+      equipo:e?e.equipo:x.ot.equipoKey, serie:e?(e.serie||''):'', inventario:e?(e.inventario||''):'',
+      tipo:tipoEventoDe(x.ot),
+      folio:(x.folio||'').startsWith('·sin-folio·')?'(sin folio)':(x.folio||''),
+      fechaDoc:ape, tecnico:x.ot.tecnico||'', empresa,
+      estado: x.cerrado?'Cerrado':etapaActualDe(x),
+      diasCiclo:String(diasCiclo), _diasNum:diasCiclo, _cerrado:x.cerrado, _critico:x.critico
+    };
+  });
+}
+function pasaBusquedaCorr(f){
+  if(!busquedaCorr) return true;
+  const b=sinAcentos(busquedaCorr).toLowerCase();
+  return CORR_COLS.concat([{k:'serie'},{k:'inventario'}]).some(c=>sinAcentos(f[c.k]||'').toLowerCase().includes(b));
+}
+function filasCorrFiltradas(excluir){
+  return filasCorrBase().filter(f=>
+    pasaBusquedaCorr(f) &&
+    CORR_COLS.every(c=>c.k===excluir || !filtrosCorr[c.k] || filtrosCorr[c.k].has(f[c.k]||''))
+  );
+}
+function filasCorrVisibles(){
+  let filas=filasCorrFiltradas(null);
+  const k=ordenCorr.k, dir=ordenCorr.dir;
+  filas.sort((a,b)=>{
+    if(k){
+      if(k==='diasCiclo') return dir*((a._diasNum||0)-(b._diasNum||0));
+      const va=a[k]||'', vb=b[k]||'';
+      return dir*String(va).localeCompare(String(vb),'es',{numeric:true,sensitivity:'base'});
+    }
+    return (a._cerrado?1:0)-(b._cerrado?1:0) || (b._diasNum||0)-(a._diasNum||0);
+  });
+  return filas;
+}
+function chipEstadoCorr(est, critico){
+  if(est==='Cerrado') return '<span class="chip verde">Cerrado</span>';
+  if(/servicio técnico/i.test(est)) return '<span class="chip ambar">'+esc(est)+'</span>';
+  if(/Retornado sin reparar/i.test(est)) return '<span class="chip rojo">'+esc(est)+'</span>';
+  return '<span class="chip '+(critico?'rojo':'azul')+'">'+esc(est)+'</span>';
+}
+function renderCorrectivos(){
+  const thead=$('#thead-corr');
+  if(!thead) return;
+  const exps=expedientesDe(state.correctivos).map(nodosExpediente);
+  const abiertos=exps.filter(x=>!x.cerrado).length;
+  const criticos=exps.filter(x=>!x.cerrado&&x.critico).length;
+  const cerrados=exps.filter(x=>x.cerrado);
+  const ciclos=cerrados.map(x=>x.ot.fechaDocumento&&x.ot.fechaCierre?diasEntre(x.ot.fechaDocumento,x.ot.fechaCierre):null).filter(v=>v!=null);
+  const cicloMedio=ciclos.length?Math.round(ciclos.reduce((a,b)=>a+b,0)/ciclos.length):null;
+  $('#corr-metricas').innerHTML=`
+    <span class="chip azul">${exps.length} expediente${exps.length!==1?'s':''}</span>
+    ${abiertos?`<span class="chip ambar">${abiertos} abierto${abiertos!==1?'s':''}</span>`:''}
+    ${criticos?`<span class="chip rojo">🔴 ${criticos} con equipo detenido</span>`:''}
+    <span class="chip verde">✔ ${cerrados.length} cerrado${cerrados.length!==1?'s':''}</span>
+    ${cicloMedio!==null?`<span class="chip gris">⏱ ciclo medio: ${cicloMedio} día${cicloMedio!==1?'s':''}</span>`:''}`;
+  thead.innerHTML=CORR_COLS.map(c=>{
+    const filtrado=!!filtrosCorr[c.k];
+    const flecha=ordenCorr.k===c.k?(ordenCorr.dir===1?' ▲':' ▼'):'';
+    return `<th><div class="th-int"><span class="tit">${esc(c.l)}${flecha}</span>
+      <button class="btn-filtro ${filtrado?'activo':''}" data-corr-col="${c.k}" title="Filtrar / ordenar">${filtrado?'⏷✓':'⏷'}</button></div></th>`;
+  }).join('');
+  const filas=filasCorrVisibles();
+  const tbody=$('#tbody-corr');
+  if(!exps.length){
+    tbody.innerHTML=`<tr><td colspan="${CORR_COLS.length}"><div class="vacio">Sin expedientes correctivos. Se crean desde la ficha del equipo con «🔩 Mantenimiento Correctivo».</div></td></tr>`;
+  } else if(!filas.length){
+    tbody.innerHTML=`<tr><td colspan="${CORR_COLS.length}"><div class="vacio">Ningún expediente coincide con los filtros.</div></td></tr>`;
+  } else {
+    tbody.innerHTML=filas.map(f=>`<tr data-key="${esc(f.key)}" style="cursor:pointer">`+CORR_COLS.map(c=>{
+      let v=f[c.k]||'';
+      if(c.k==='equipo') return `<td style="max-width:200px" title="${esc(v)} · ${esc(f.serie)}"><strong>${esc(v)}</strong><br><small style="color:var(--gris-4)">${esc(f.serie)}</small></td>`;
+      if(c.k==='estado') return `<td>${chipEstadoCorr(f.estado,f._critico)}</td>`;
+      if(c.k==='fechaDoc') return `<td>${v?fmtFecha(v):'—'}</td>`;
+      if(c.k==='diasCiclo') return `<td><strong style="${(!f._cerrado&&f._diasNum>30)?'color:var(--rojo)':''}">${esc(v)}</strong></td>`;
+      return `<td title="${esc(v)}">${esc(v)||'—'}</td>`;
+    }).join('')+'</tr>').join('');
+  }
+  $('#contador-corr').textContent=`Mostrando ${filas.length} de ${exps.length} expedientes`;
+  $('#btn-limpiar-corr').style.display=(Object.keys(filtrosCorr).length||busquedaCorr||ordenCorr.k)?'':'none';
+}
+function abrirPopoverCorr(colKey, ancla){
+  const pop=$('#filtro-pop');
+  popColCorr=colKey; popCol=null; popColPlan=null; popColPend=null;
+  const campo=CORR_COLS.find(c=>c.k===colKey);
+  const baseF=filasCorrFiltradas(colKey);
+  const conteo=new Map();
+  baseF.forEach(f=>{ const v=f[colKey]||''; conteo.set(v,(conteo.get(v)||0)+1); });
+  let valores=[...conteo.keys()].sort((a,b)=>String(a).localeCompare(String(b),'es',{numeric:true,sensitivity:'base'}));
+  const sel=filtrosCorr[colKey];
+  pop.innerHTML=`
+    <div class="fp-cab">Filtro: ${esc(campo.l)}</div>
+    <div class="fp-sec"><button data-orden="1">Ordenar A → Z</button><button data-orden="-1">Ordenar Z → A</button></div>
+    <input class="fp-buscar" type="text" placeholder="Buscar valores…">
+    <div class="fp-lista">
+      <label><input type="checkbox" class="fp-todos" ${!sel?'checked':''}> <strong>(Seleccionar todo)</strong></label>
+      ${valores.map(v=>`<label data-v="${esc(v)}"><input type="checkbox" class="fp-val" value="${esc(v)}" ${(!sel||sel.has(v))?'checked':''}> <span>${v===''?'<em>(Vacías)</em>':esc(v.length>40?v.slice(0,40)+'…':v)}</span><span class="cnt">${conteo.get(v)}</span></label>`).join('')}
+    </div>
+    <div class="fp-pie"><button class="limpiar">Limpiar filtro</button><button class="ok">Aplicar</button></div>`;
+  const rect=ancla.getBoundingClientRect();
+  pop.style.display='block';
+  let x=rect.left+window.scrollX;
+  if(x+270 > window.scrollX+document.documentElement.clientWidth-10) x=window.scrollX+document.documentElement.clientWidth-280;
+  pop.style.left=x+'px'; pop.style.top=(rect.bottom+window.scrollY+6)+'px';
+  pop.querySelector('.fp-buscar').addEventListener('input', ev=>{
+    const b=sinAcentos(ev.target.value).toLowerCase();
+    pop.querySelectorAll('.fp-lista label[data-v]').forEach(l=>{ l.style.display=sinAcentos(l.dataset.v).toLowerCase().includes(b)?'':'none'; });
+  });
+  pop.querySelector('.fp-todos').addEventListener('change', ev=>{
+    pop.querySelectorAll('.fp-val').forEach(ch=>{ if(ch.closest('label').style.display!=='none') ch.checked=ev.target.checked; });
+  });
+  pop.querySelectorAll('[data-orden]').forEach(b=>b.addEventListener('click',()=>{
+    ordenCorr=(ordenCorr.k===colKey&&ordenCorr.dir===+b.dataset.orden)?{k:null,dir:1}:{k:colKey,dir:+b.dataset.orden};
+    renderCorrectivos(); cerrarPopover();
+  }));
+  pop.querySelector('.limpiar').addEventListener('click',()=>{ delete filtrosCorr[colKey]; renderCorrectivos(); cerrarPopover(); });
+  pop.querySelector('.ok').addEventListener('click',()=>{
+    const marcados=[...pop.querySelectorAll('.fp-val')].filter(ch=>ch.checked).map(ch=>ch.value);
+    const todos=pop.querySelectorAll('.fp-val').length;
+    if(marcados.length===todos) delete filtrosCorr[colKey];
+    else filtrosCorr[colKey]=new Set(marcados);
+    grabEvento({e:'filtro', tabla:'correctivos', col:colKey, seleccionados:marcados.length});
+    renderCorrectivos(); cerrarPopover();
+  });
+}
+function exportarCorrectivosVista(){
+  if(typeof XLSX==='undefined'){ toast('Librería XLSX no disponible.'); return; }
+  const filas=filasCorrVisibles();
+  if(!filas.length){ toast('No hay filas para exportar.'); return; }
+  const aoa=[CORR_COLS.map(c=>c.l), ...filas.map(f=>CORR_COLS.map(c=>String(c.k==='fechaDoc'&&f[c.k]?fmtFecha(f[c.k]):(f[c.k]||''))))];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, hojaTexto(aoa, CORR_COLS.map(c=>({wch:Math.max(c.l.length+2,12)}))), 'Correctivos');
+  XLSX.writeFile(wb, 'Correctivos_GMP2026_'+hoyISO()+'.xlsx');
+  toast('⬇ Exportados '+filas.length+' expedientes.');
+}
 function pendPorId(id){ return state.pendientes.find(p=>p.id===id); }
 function gestionAuto(p, texto){ (p.gestiones=p.gestiones||[]).push({fecha:new Date().toLocaleString('es-CL'), texto}); p.actualizado=hoyISO(); }
 function pcCompletar(id){
@@ -3205,6 +3392,19 @@ function conectarEventos(){
     if(b){ ev.stopPropagation(); (popColPlan===b.dataset.planCol)?cerrarPopover():abrirPopoverPlan(b.dataset.planCol,b); }
   });
   $('#tbody-plan').addEventListener('click',ev=>{
+    const tr=ev.target.closest('tr[data-key]');
+    if(tr) abrirDetalle(tr.dataset.key);
+  });
+
+  /* Correctivos (tabla tipo Excel) */
+  $('#busqueda-corr').addEventListener('input', debounce(()=>{ busquedaCorr=$('#busqueda-corr').value; renderCorrectivos(); },180));
+  $('#btn-limpiar-corr').addEventListener('click',()=>{ filtrosCorr={}; ordenCorr={k:null,dir:1}; busquedaCorr=''; $('#busqueda-corr').value=''; renderCorrectivos(); });
+  $('#btn-exportar-corr').addEventListener('click',exportarCorrectivosVista);
+  $('#thead-corr').addEventListener('click',ev=>{
+    const b=ev.target.closest('.btn-filtro');
+    if(b){ ev.stopPropagation(); (popColCorr===b.dataset.corrCol)?cerrarPopover():abrirPopoverCorr(b.dataset.corrCol,b); }
+  });
+  $('#tbody-corr').addEventListener('click',ev=>{
     const tr=ev.target.closest('tr[data-key]');
     if(tr) abrirDetalle(tr.dataset.key);
   });
