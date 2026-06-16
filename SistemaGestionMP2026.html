@@ -330,6 +330,25 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
   .buscador{min-width:140px}
 }
 @media print{header nav,.det-acciones,.barra-tabla,.paginacion{display:none!important}}
+/* Ficha imprimible para la carpeta física del equipo */
+#ficha-print{display:none}
+@media print{
+  body.print-ficha>*{display:none!important}
+  body.print-ficha #ficha-print{display:block!important}
+  #ficha-print{font-family:Arial,Helvetica,sans-serif;color:#000;font-size:11px;line-height:1.35}
+  #ficha-print .fp-encab{font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:#333;border-bottom:1px solid #999;padding-bottom:3px;margin-bottom:8px}
+  #ficha-print h1{font-size:18px;margin:0 0 2px}
+  #ficha-print .fp-sub{font-size:12px;color:#222;margin-bottom:6px}
+  #ficha-print .fp-sec{font-weight:bold;font-size:12px;margin:13px 0 4px;border-bottom:2px solid #333;padding-bottom:2px}
+  #ficha-print .fp-campos{display:grid;grid-template-columns:1fr 1fr;gap:1px 22px}
+  #ficha-print .fp-campos div{border-bottom:1px solid #ddd;padding:2px 0}
+  #ficha-print .fp-estado{border:1px solid #999;background:#f4f4f4;padding:6px 8px;border-radius:4px}
+  #ficha-print table{width:100%;border-collapse:collapse;font-size:10.5px;margin-top:4px}
+  #ficha-print th,#ficha-print td{border:1px solid #999;padding:3px 6px;text-align:left;vertical-align:top}
+  #ficha-print th{background:#e8e8e8}
+  #ficha-print tr{page-break-inside:avoid}
+  #ficha-print .fp-pie{margin-top:20px;font-size:9.5px;color:#444;display:flex;justify-content:space-between;border-top:1px solid #999;padding-top:6px}
+}
 </style>
 </head>
 <body>
@@ -508,6 +527,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
         <button class="btn primario" id="btn-abrir-mp">🔧 Mantenimiento Preventivo</button>
         <button class="btn" id="btn-abrir-pendiente">📋 Pendientes</button>
         <button class="btn" id="btn-abrir-ot">🔩 Mantenimiento Correctivo</button>
+        <button class="btn" id="btn-imprimir-ficha" title="Imprime una ficha limpia con la identificación, el estado y la bitácora completa, para archivar en la carpeta física">🖨 Imprimir ficha</button>
       </div>
     </div>
     <div id="det-estado"></div>
@@ -991,7 +1011,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-16.44';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-16.45';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -2463,6 +2483,36 @@ function pintarBitTabla(key){
       + bit.map(x=>`<tr ${x.ref?`class="click" data-bit="${x.ref.t}|${esc(x.ref.id)}" title="Abrir este evento"`:''}><td><strong>${fmtFecha(x.f)}</strong></td><td>${esc(x.txt)}</td><td><span class="chip ${x.clase}">${esc(x.label)}</span></td></tr>`).join('')
       + `</table></div>`
     : '<div class="vacio">Sin eventos que coincidan con el filtro.</div>';
+}
+/* ---------- Ficha imprimible para la carpeta física ---------- */
+function construirFichaHTML(e, key){
+  const bit=bitacoraEquipo(key);                 /* bitácora completa, sin filtros: es el registro oficial */
+  const sig=e._sig||decidirSiguienteAccion(e);
+  const est=e._estado||estadoActualEquipo(key)||'Sin estado registrado en la app';
+  const campos=CAMPOS.filter(c=>c.k!=='equipo').map(c=>`<div><strong>${esc(c.l)}:</strong> ${esc(e[c.k])||'—'}</div>`).join('');
+  const filasBit = bit.length
+    ? bit.map(x=>`<tr><td style="white-space:nowrap">${fmtFecha(x.f)}</td><td>${esc(x.txt)}</td><td>${esc(x.label)}</td></tr>`).join('')
+    : '<tr><td colspan="3">Sin eventos registrados para este equipo.</td></tr>';
+  return `
+    <div class="fp-encab">Hospital HHHA · Equipamiento Clínico — Ficha de Equipo · Programa de Mantenciones Preventivas 2026</div>
+    <h1>${esc(e.equipo)||'(Equipo sin nombre)'}</h1>
+    <div class="fp-sub">N° Inventario: <strong>${esc(e.inventario)||'—'}</strong> · Serie: <strong>${esc(e.serie)||'—'}</strong> · N° Carpeta: <strong>${esc(e.carpeta)||'—'}</strong></div>
+    <div class="fp-sec">Identificación</div>
+    <div class="fp-campos">${campos}</div>
+    <div class="fp-sec">Estado actual</div>
+    <div class="fp-estado"><strong>Estado:</strong> ${esc(est)}${e._diasEstado!==''&&e._diasEstado!=null?` · ${esc(String(e._diasEstado))} días en estado`:''}<br><strong>Siguiente acción:</strong> ${esc(sig.texto)}</div>
+    <div class="fp-sec">Bitácora del equipo — ${bit.length} evento${bit.length!==1?'s':''} (orden cronológico)</div>
+    <table><thead><tr><th style="width:80px">Fecha</th><th>Qué ocurrió</th><th style="width:105px">Estado</th></tr></thead><tbody>${filasBit}</tbody></table>
+    <div class="fp-pie"><span>Generado: ${fmtFecha(hoyISO())} · Sistema de Gestión MP 2026 (build ${esc(APP_BUILD)})</span><span>Revisado por: ____________________________</span></div>`;
+}
+function imprimirFicha(key){
+  const e=equipoPorKey(key); if(!e){ toast('No se encontró el equipo para imprimir.'); return; }
+  const cont=$('#ficha-print'); if(!cont) return;
+  cont.innerHTML = construirFichaHTML(e, key);
+  document.body.classList.add('print-ficha');
+  const limpiar=()=>{ document.body.classList.remove('print-ficha'); window.removeEventListener('afterprint',limpiar); };
+  window.addEventListener('afterprint',limpiar);
+  window.print();
 }
 
 function renderDetalle(key){
@@ -4417,6 +4467,7 @@ function conectarEventos(){
   $('#btn-abrir-mp').addEventListener('click',()=>abrirModalMP(detalleKey,null));
   $('#btn-abrir-pendiente').addEventListener('click',()=>abrirModalPendiente(detalleKey,null,null));
   $('#btn-abrir-ot').addEventListener('click',()=>abrirModalOT(detalleKey,null));
+  $('#btn-imprimir-ficha').addEventListener('click',()=>{ if(detalleKey) imprimirFicha(detalleKey); });
   $('#vista-detalle').addEventListener('click',ev=>{
     const cp=ev.target.closest('[data-copiar]');
     if(cp){ copiarTexto(cp.dataset.copiar); return; }
@@ -4711,5 +4762,7 @@ function conectarEventos(){
   }, 900);
 })();
 </script>
+<!-- Contenedor de la ficha imprimible (se llena al imprimir; oculto en pantalla) -->
+<div id="ficha-print"></div>
 </body>
 </html>

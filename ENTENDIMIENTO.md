@@ -8,7 +8,7 @@
 > *Está escrito en primera persona, tal como lo expliqué, para poder leerlo y confirmar que se
 > entendió todo. Si algo no calza con la realidad, se corrige aquí primero.*
 
-_Última actualización: 2026-06-16 · App build 2026-06-16.44_
+_Última actualización: 2026-06-16 · App build 2026-06-16.45_
 
 ---
 
@@ -151,6 +151,11 @@ firmados sin oficializar, MP de meses pasados sin resultado, FS/NU sin resoluci�
 retorno, pendientes muy atrasados). Cada hallazgo lleva directo a la ficha del equipo. **No inventa
 ni descarta nada**: solo señala lo que no calza para que yo decida.
 
+Desde la ficha puedo **imprimir una hoja limpia del equipo** («🖨 Imprimir ficha») para archivar en
+su **carpeta física**: lleva la identificación completa, el estado actual con la siguiente acción y
+la **bitácora completa** en orden cronológico, más la fecha de generación y una línea de firma. Es
+el puente entre la app y el papel que vive en la carpeta de cada equipo.
+
 ---
 
 ## 9. Principios que deben guiar la aplicación final
@@ -199,6 +204,7 @@ ni descarta nada**: solo señala lo que no calza para que yo decida.
 | 2026‑06‑16 | **Registro rápido de avances correctivos** (➕ Avance) desde la vista Correctivos, sin entrar a la ficha | Reviso carpetas y necesito registrar envíos/recepciones rápido; la vía actual era lenta |
 | 2026‑06‑16 | **Grabación más inteligente**: captura la entidad de cada clic y detecta **clics muertos** | Que la grabación me sirva para que infieras lo que busco con cada clic |
 | 2026‑06‑16 | **Panel de Verificación de inconsistencias**: la app revisa la calidad de los datos (detenidos sin OT, expedientes estancados, reportes vencidos/firmados sin oficializar, MP vencidas, FS/NU sin resolver, envíos sin retorno, pendientes muy atrasados); cada hallazgo abre la ficha | Detectar de una lo que no calza, sin descartar ni inventar nada, para corregirlo antes de oficializar |
+| 2026‑06‑16 | **Imprimir ficha del equipo** («🖨 Imprimir ficha»): hoja limpia con identificación, estado, siguiente acción y bitácora completa + línea de firma, lista para la carpeta física | Necesito una versión en papel ordenada para archivar en la carpeta física de cada equipo |
 
 ---
 
