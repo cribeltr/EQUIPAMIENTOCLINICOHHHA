@@ -947,7 +947,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-16.38';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-16.39';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -2562,11 +2562,15 @@ function abrirModalPendiente(equipoKey, pendiente, prellenar){
   peGestiones = pendiente ? (pendiente.gestiones||[]).map(g=>({...g})) : [];
   $('#pe-equipo-nombre').textContent = e ? `${e.equipo} · Serie ${e.serie||'—'} · Inv. ${e.inventario||'—'}` : equipoKey;
   $('#pe-fecha').value = pendiente?pendiente.fechaCompromiso:hoyISO();
-  $('#pe-tipo').value = pendiente?pendiente.tipo:(prellenar&&prellenar.tipo)||TIPOS_PENDIENTE[0];
-  /* si el tipo es de protocolo, asegurar su lista (Sí/No/Imprimir/Gestión); si es reprogramación, su ciclo de reporte */
-  const tmAbrir=TIPO_PEND_PROTOCOLO[$('#pe-tipo').value];
-  if(tmAbrir) asegurarProtocoloEnTareas(tmAbrir);
-  else if($('#pe-tipo').value===TIPO_PEND_REPROG) asegurarReprogEnTareas();
+  /* un pendiente NUEVO parte con tipo neutro y SIN checklist; el checklist solo aparece
+     al elegir explícitamente un tipo de protocolo/reprogramación (manejador de #pe-tipo).
+     Al ABRIR uno EXISTENTE de ese tipo, se asegura su checklist (para el respaldo histórico). */
+  $('#pe-tipo').value = pendiente?pendiente.tipo:((prellenar&&prellenar.tipo)||'Otro');
+  if(pendiente){
+    const tmAbrir=TIPO_PEND_PROTOCOLO[$('#pe-tipo').value];
+    if(tmAbrir) asegurarProtocoloEnTareas(tmAbrir);
+    else if($('#pe-tipo').value===TIPO_PEND_REPROG) asegurarReprogEnTareas();
+  }
   $('#pe-descripcion').value = pendiente?pendiente.descripcion:(prellenar&&prellenar.descripcion)||'';
   $('#pe-resp-adm').value = pendiente?pendiente.respAdmin:RESP_ADM_DEFECTO;
   $('#pe-resp-eje').value = pendiente?pendiente.respEjec:(prefs.ultimoRespEje||'');

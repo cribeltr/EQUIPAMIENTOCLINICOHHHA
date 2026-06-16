@@ -8,7 +8,7 @@
 > *Está escrito en primera persona, tal como lo expliqué, para poder leerlo y confirmar que se
 > entendió todo. Si algo no calza con la realidad, se corrige aquí primero.*
 
-_Última actualización: 2026-06-16 · App build 2026-06-16.38_
+_Última actualización: 2026-06-16 · App build 2026-06-16.39_
 
 ---
 
@@ -182,6 +182,7 @@ estado actual.
 | 2026‑06‑16 | **Oficializar y cerrar** la reprogramación: la app indica **qué código y en qué columna del Excel** y, al recargar la carta, sugiere cerrar | Cerrar el ciclo: firmado → escribo el código en la carta → recargo (oficial) → cierro |
 | 2026‑06‑16 | El respaldo no guarda columnas derivadas (se recalculan) | Respaldos más livianos para traspasar/guardar |
 | 2026‑06‑16 | **Bitácora del equipo** en la ficha: una fila por evento con su fecha y estado (MP, reprogramaciones, OT, envíos, retornos, cierres, pendientes) en orden cronológico | Ver de un vistazo *qué ocurrió y cuándo* con cada equipo, sin reconstruirlo a mano |
+| 2026‑06‑16 | Un **pendiente nuevo** parte **limpio** (tipo «Otro», sin checklist); el checklist aparece solo al **elegir** un tipo de protocolo/reprogramación | No quiero que se arme una lista por defecto en cualquier pendiente que creo |
 
 ---
 
