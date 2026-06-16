@@ -227,6 +227,16 @@ table.lista tr.click:hover td{background:var(--azul-claro)}
 .prot-com{background:#fff;border-left:3px solid var(--gris-3);border-radius:0 6px 6px 0;padding:4px 9px;font-size:.8rem}
 .prot-com time{color:var(--gris-4);font-size:.72rem;margin-right:6px}
 .tp-in{width:100%;margin-top:6px;padding:6px 10px;border:1px solid var(--gris-3);border-radius:7px;font-size:.82rem}
+/* Subtareas de un protocolo en «Gestión» */
+.tp-sub{margin:7px 0 0;padding:7px 9px;border:1px dashed var(--ambar);border-radius:7px;background:var(--ambar-bg)}
+.tp-sub-lbl{font-size:.7rem;text-transform:uppercase;letter-spacing:.4px;color:var(--ambar);font-weight:700;margin-bottom:5px}
+.tp-sub-lista{display:flex;flex-direction:column;gap:4px}
+.tp-sub-it{display:flex;align-items:center;gap:7px;font-size:.83rem;background:#fff;border:1px solid var(--gris-2);border-radius:6px;padding:4px 8px}
+.tp-sub-it input[type=checkbox]{accent-color:var(--verde);width:15px;height:15px}
+.tp-sub-it.hecha span{text-decoration:line-through;color:var(--gris-4)}
+.tp-sub-it .quitar{margin-left:auto;border:none;background:none;color:var(--gris-4);font-size:.95rem;padding:1px 5px;border-radius:5px;cursor:pointer}
+.tp-sub-it .quitar:hover{color:var(--rojo);background:var(--gris-1)}
+.tp-sub-in{width:100%;margin-top:6px;padding:5px 9px;border:1px solid var(--gris-3);border-radius:6px;font-size:.8rem}
 .sub-form{border:1px dashed var(--gris-3);border-left:4px solid var(--azul);background:var(--gris-1);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:12px}
 
 /* ---------- Bandeja de pendientes ---------- */
@@ -930,7 +940,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-16.30';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-16.31';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -1017,7 +1027,27 @@ const OPC_PROTOCOLO = ['Sí','No','Imprimir','Gestión'];   // estados de una ta
 const CLASE_OPC_PROT = {'Sí':'po-si','No':'po-no','Imprimir':'po-imp','Gestión':'po-ges'};
 /* una tarea de protocolo se considera resuelta cuando tiene respuesta definitiva (Sí/No);
    Imprimir y Gestión señalan una acción aún pendiente. Las tareas normales usan «hecha». */
-function tareaResuelta(t){ return (t && t.opciones && t.opciones.length) ? (t.estado==='Sí'||t.estado==='No') : !!(t&&t.hecha); }
+function tareaResuelta(t){
+  if(t && t.opciones && t.opciones.length){
+    if(t.estado==='Sí'||t.estado==='No') return true;
+    /* «Gestión» con subtareas se resuelve cuando todas las subtareas están listas */
+    if(t.estado==='Gestión' && t.subtareas && t.subtareas.length) return t.subtareas.every(s=>s.hecha);
+    return false;
+  }
+  return !!(t&&t.hecha);
+}
+/* Bloque de subtareas de un protocolo en «Gestión» (o que ya tenga subtareas).
+   pfx='' → formulario (valores «i|j»); pfx=p.id → bandeja (valores «id|i|j»). */
+function subtareasHtml(t, idx, pfx, dis){
+  if(!(t.estado==='Gestión' || (t.subtareas && t.subtareas.length))) return '';
+  const base = pfx!=='' ? (pfx+'|'+idx) : (''+idx);
+  const A = pfx!=='' ? {add:'data-pc-prot-sub', chk:'data-pc-prot-subchk', del:'data-pc-prot-subdel'}
+                     : {add:'data-prot-sub', chk:'data-prot-subchk', del:'data-prot-subdel'};
+  const subs=(t.subtareas||[]).map((s,j)=>
+    `<label class="tp-sub-it ${s.hecha?'hecha':''}"><input type="checkbox" ${A.chk}="${base}|${j}" ${s.hecha?'checked':''} ${dis?'disabled':''}> <span>${esc(s.texto)}</span>${dis?'':`<button class="quitar" ${A.del}="${base}|${j}" title="Quitar subtarea">✕</button>`}</label>`
+  ).join('') || '<small style="color:var(--gris-4)">Sin subtareas: detalla aquí la gestión a realizar.</small>';
+  return `<div class="tp-sub"><div class="tp-sub-lbl">⚙ Gestión · subtareas</div><div class="tp-sub-lista">${subs}</div>${dis?'':`<input type="text" class="tp-sub-in" ${A.add}="${base}" placeholder="Nueva subtarea… (Enter)">`}</div>`;
+}
 function tareasProtocolo(tipo){
   const mk = txt => ({texto:txt, opciones:OPC_PROTOCOLO.slice(), estado:'', comentarios:[]});
   return tipo==='Externo'
@@ -2022,7 +2052,11 @@ function exportarTodo(){
     filasP.push([eqCampo(p.equipoKey,'equipo'),eqCampo(p.equipoKey,'serie'),eqCampo(p.equipoKey,'inventario'),
       p.tipo||'', fmtFecha(p.fechaCompromiso), p.descripcion||'',
       (p.tareas||[]).map(t=>{
-        if(t.opciones&&t.opciones.length){ const c=(t.comentarios||[]).map(x=>x.texto).join(' · '); return '['+(t.estado||'—')+'] '+t.texto+(c?' — '+c:''); }
+        if(t.opciones&&t.opciones.length){
+          const c=(t.comentarios||[]).map(x=>x.texto).join(' · ');
+          const sub=(t.subtareas||[]).map(s=>'\n    '+(s.hecha?'[✔] ':'[  ] ')+s.texto).join('');
+          return '['+(t.estado||'—')+'] '+t.texto+(c?' — '+c:'')+sub;
+        }
         return (t.hecha?'[✔] ':'[  ] ')+t.texto;
       }).join('\n'),
       p.respAdmin||'', p.respEjec||'', p.estado||'Abierto', p.esperaDe||'', p.fechaCompletado?fmtFecha(p.fechaCompletado):'',
@@ -2361,7 +2395,7 @@ let peEditando=null, peTareas=[], peGestiones=[];
 function abrirModalPendiente(equipoKey, pendiente, prellenar){
   const e=equipoPorKey(equipoKey);
   peEditando=pendiente||null;
-  peTareas = pendiente ? (pendiente.tareas||[]).map(t=>({...t, opciones:(t.opciones||[]).slice(), comentarios:(t.comentarios||[]).map(c=>({...c}))})) : [];
+  peTareas = pendiente ? (pendiente.tareas||[]).map(t=>({...t, opciones:(t.opciones||[]).slice(), comentarios:(t.comentarios||[]).map(c=>({...c})), subtareas:(t.subtareas||[]).map(s=>({...s}))})) : [];
   peGestiones = pendiente ? (pendiente.gestiones||[]).map(g=>({...g})) : [];
   $('#pe-equipo-nombre').textContent = e ? `${e.equipo} · Serie ${e.serie||'—'} · Inv. ${e.inventario||'—'}` : equipoKey;
   $('#pe-fecha').value = pendiente?pendiente.fechaCompromiso:hoyISO();
@@ -2390,6 +2424,7 @@ function renderPeTareas(){
         <div class="tp-cab"><span class="tp-txt">${esc(t.texto)}</span>
           <div class="tp-opts">${opts}</div>
           <button class="quitar" data-quitar-tarea="${i}" title="Quitar protocolo">✕</button></div>
+        ${subtareasHtml(t, i, '', false)}
         <div class="tp-coms">${coms}</div>
         <input type="text" class="tp-in" data-prot-com="${i}" placeholder="Comentario o actualización… (Enter)">
       </div>`;
@@ -3236,6 +3271,7 @@ function filaExpandida(p){
       const coms=(t.comentarios||[]).map(c=>`<div class="prot-com"><time>${esc(c.fecha)}</time> ${esc(c.texto)}</div>`).join('');
       return `<div class="tarea-prot ${tareaResuelta(t)?'ok':''}">
         <div class="tp-cab"><span class="tp-txt">${esc(t.texto)}</span><div class="tp-opts">${opts}</div></div>
+        ${subtareasHtml(t, i, p.id, dis)}
         ${coms?`<div class="tp-coms">${coms}</div>`:''}
         ${dis?'':`<input type="text" class="tp-in" data-pc-prot-com="${p.id}|${i}" placeholder="Comentario o actualización… (Enter)">`}
       </div>`;
@@ -3274,7 +3310,7 @@ function filasPendBase(){
       /* texto buscable: datos del equipo + descripción + texto/estado/comentarios de tareas + texto de gestiones */
       _buscar:[ e?e.equipo:'', e?e.serie:'', e?e.inventario:'', e?e.servicio:'', e?e.unidad:'', e?e.ubicacion:'', e?e.marca:'', e?e.modelo:'',
         p.tipo, p.descripcion, p.respAdmin, p.respEjec, p.esperaDe,
-        ...((p.tareas||[]).flatMap(t=>[t.texto, t.estado||'', ...((t.comentarios||[]).map(c=>c.texto))])),
+        ...((p.tareas||[]).flatMap(t=>[t.texto, t.estado||'', ...((t.comentarios||[]).map(c=>c.texto)), ...((t.subtareas||[]).map(s=>s.texto))])),
         ...((p.gestiones||[]).map(g=>g.texto)) ].filter(Boolean).join(' ') };
   });
 }
@@ -4043,12 +4079,25 @@ function conectarEventos(){
   $('#pe-tareas').addEventListener('click',ev=>{
     const q=ev.target.closest('[data-quitar-tarea]');
     if(q){ peTareas.splice(+q.dataset.quitarTarea,1); renderPeTareas(); return; }
+    const sd=ev.target.closest('[data-prot-subdel]');
+    if(sd){ const [i,j]=sd.dataset.protSubdel.split('|'); peTareas[+i].subtareas.splice(+j,1); renderPeTareas(); return; }
     const po=ev.target.closest('[data-prot-opt]');
     if(po){ const [i,o]=po.dataset.protOpt.split('|'); const t=peTareas[+i]; t.estado=(t.estado===o?'':o); renderPeTareas(); return; }
+    const sc=ev.target.closest('[data-prot-subchk]');
+    if(sc){ const [i,j]=sc.dataset.protSubchk.split('|'); peTareas[+i].subtareas[+j].hecha=sc.checked; renderPeTareas(); return; }
     if(ev.target.matches('[data-tarea]')){ peTareas[+ev.target.dataset.tarea].hecha=ev.target.checked; renderPeTareas(); }
   });
   $('#pe-tareas').addEventListener('keydown',ev=>{
-    if(ev.key!=='Enter' || !ev.target.matches('[data-prot-com]')) return;
+    if(ev.key!=='Enter') return;
+    if(ev.target.matches('[data-prot-sub]')){
+      ev.preventDefault();
+      const i=+ev.target.dataset.protSub, txt=ev.target.value.trim(); if(!txt) return;
+      const t=peTareas[i]; (t.subtareas=t.subtareas||[]).push({texto:txt, hecha:false});
+      renderPeTareas();
+      const again=$('#pe-tareas').querySelector(`[data-prot-sub="${i}"]`); if(again) again.focus();
+      return;
+    }
+    if(!ev.target.matches('[data-prot-com]')) return;
     ev.preventDefault();
     const i=+ev.target.dataset.protCom, txt=ev.target.value.trim();
     if(!txt) return;
@@ -4107,6 +4156,18 @@ function conectarEventos(){
       }
       return;
     }
+    const sd=ev.target.closest('[data-pc-prot-subdel]');
+    if(sd){ const [id,i,j]=sd.dataset.pcProtSubdel.split('|'); const p=pendPorId(id);
+      if(p&&p.tareas&&p.tareas[+i]&&p.tareas[+i].subtareas){ p.tareas[+i].subtareas.splice(+j,1); p.actualizado=hoyISO(); guardar(); renderPendientes(); } return; }
+    const sc=ev.target.closest('[data-pc-prot-subchk]');
+    if(sc){ const [id,i,j]=sc.dataset.pcProtSubchk.split('|'); const p=pendPorId(id);
+      if(p&&p.tareas&&p.tareas[+i]&&p.tareas[+i].subtareas&&p.tareas[+i].subtareas[+j]){
+        p.tareas[+i].subtareas[+j].hecha=sc.checked; p.actualizado=hoyISO(); guardar();
+        if(sc.checked && p.estado!=='Completado' && p.tareas.length && p.tareas.every(tareaResuelta)){
+          if(confirm('Todos los protocolos están resueltos. ¿Completar el pendiente?')){ pcCompletar(id); return; }
+        }
+        renderPendientes();
+      } return; }
     if(ev.target.matches('[data-pc-tarea]')){
       const [id,i]=ev.target.dataset.pcTarea.split('|');
       const p=pendPorId(id);
@@ -4127,6 +4188,15 @@ function conectarEventos(){
   });
   $('#lista-pendientes').addEventListener('keydown',ev=>{
     if(ev.key!=='Enter') return;
+    if(ev.target.matches('[data-pc-prot-sub]')){
+      ev.preventDefault();
+      const [id,i]=ev.target.dataset.pcProtSub.split('|');
+      const p=pendPorId(id), txt=ev.target.value.trim();
+      if(!p||!p.tareas||!p.tareas[+i]||!txt) return;
+      const t=p.tareas[+i]; (t.subtareas=t.subtareas||[]).push({texto:txt, hecha:false});
+      p.actualizado=hoyISO(); guardar(); renderPendientes(); toast('➕ Subtarea agregada.');
+      return;
+    }
     if(ev.target.matches('[data-pc-prot-com]')){
       ev.preventDefault();
       const [id,i]=ev.target.dataset.pcProtCom.split('|');
