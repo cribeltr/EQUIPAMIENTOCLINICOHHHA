@@ -8,7 +8,7 @@
 > *Está escrito en primera persona, tal como lo expliqué, para poder leerlo y confirmar que se
 > entendió todo. Si algo no calza con la realidad, se corrige aquí primero.*
 
-_Última actualización: 2026-06-16 · App build 2026-06-16.45_
+_Última actualización: 2026-06-16 · App build 2026-06-16.46_
 
 ---
 
@@ -170,6 +170,9 @@ el puente entre la app y el papel que vive en la carpeta de cada equipo.
    y la app debe acompañar ese ciclo, no entorpecerlo.
 5. **Lo que hago a diario debe ser rápido**: buscar, filtrar por servicio/mes, trabajar por lote,
    ver/exportar solo lo que necesito.
+6. **Mi trabajo no se pierde en silencio.** La app cuida primero los datos irrecuperables (lo que
+   registro), avisa de forma visible si no puede guardar y tolera respaldos antiguos o parciales sin
+   caerse. Ante la duda, siempre puedo descargar un respaldo.
 
 ---
 
@@ -205,6 +208,8 @@ el puente entre la app y el papel que vive en la carpeta de cada equipo.
 | 2026‑06‑16 | **Grabación más inteligente**: captura la entidad de cada clic y detecta **clics muertos** | Que la grabación me sirva para que infieras lo que busco con cada clic |
 | 2026‑06‑16 | **Panel de Verificación de inconsistencias**: la app revisa la calidad de los datos (detenidos sin OT, expedientes estancados, reportes vencidos/firmados sin oficializar, MP vencidas, FS/NU sin resolver, envíos sin retorno, pendientes muy atrasados); cada hallazgo abre la ficha | Detectar de una lo que no calza, sin descartar ni inventar nada, para corregirlo antes de oficializar |
 | 2026‑06‑16 | **Imprimir ficha del equipo** («🖨 Imprimir ficha»): hoja limpia con identificación, estado, siguiente acción y bitácora completa + línea de firma, lista para la carpeta física | Necesito una versión en papel ordenada para archivar en la carpeta física de cada equipo |
+| 2026‑06‑16 | **Resguardo ante almacenamiento lleno**: si el navegador no puede guardar, la app prioriza mi trabajo (mantenciones/pendientes/correctivos) liberando la planilla (que se recupera del Excel) y, si aun así no cabe, muestra un aviso fijo para descargar respaldo de inmediato | Que nunca pierda mi trabajo en silencio aunque el navegador se quede sin espacio |
+| 2026‑06‑16 | **Tolerancia a respaldos antiguos/editados**: al cargar, la app completa estructuras faltantes (tareas, gestiones, avances) para no caerse con datos parciales | Poder restaurar respaldos viejos o corregidos a mano sin que la aplicación falle |
 
 ---
 

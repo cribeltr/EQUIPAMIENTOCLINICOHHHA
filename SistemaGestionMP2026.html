@@ -349,9 +349,19 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
   #ficha-print tr{page-break-inside:avoid}
   #ficha-print .fp-pie{margin-top:20px;font-size:9.5px;color:#444;display:flex;justify-content:space-between;border-top:1px solid #999;padding-top:6px}
 }
+#aviso-guardado{display:none;position:fixed;left:0;right:0;bottom:0;z-index:200;background:var(--rojo);color:#fff;padding:12px 18px;align-items:center;gap:16px;justify-content:center;box-shadow:0 -2px 14px rgba(0,0,0,.28);flex-wrap:wrap;font-size:.92rem}
+#aviso-guardado.activo{display:flex}
+#aviso-guardado .btn{background:#fff;color:var(--rojo);border:none;font-weight:700}
+@media print{#aviso-guardado{display:none!important}}
 </style>
 </head>
 <body>
+
+<!-- Aviso crítico: el almacenamiento del navegador no pudo guardar el trabajo del usuario -->
+<div id="aviso-guardado" role="alert">
+  <span>⚠️ <strong>Tus cambios no se están guardando</strong> — el almacenamiento del navegador está lleno. Descarga un respaldo ahora para no perder tu trabajo.</span>
+  <button class="btn" id="btn-aviso-respaldo">💾 Descargar respaldo ahora</button>
+</div>
 
 <header>
   <div class="brand">
@@ -1011,7 +1021,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-16.45';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-16.46';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -1246,15 +1256,52 @@ const LS_DATOS='gmp2026.datos', LS_USUARIO='gmp2026.usuario', LS_PREF='gmp2026.p
 let prefs={};   /* memoria de uso: última fecha MP, último ejecutor, último responsable ejecutivo */
 function cargarPrefs(){ try{ prefs=JSON.parse(localStorage.getItem(LS_PREF)||'{}')||{}; }catch(e){ prefs={}; } }
 function guardarPrefs(){ try{ localStorage.setItem(LS_PREF, JSON.stringify(prefs)); }catch(e){} }
+function setLS(k,v){ try{ localStorage.setItem(k,v); return true; }catch(e){ return false; } }
+let _avisoPlanillaMostrado=false;
 function guardar(){
-  try{ localStorage.setItem(LS_USUARIO, JSON.stringify({manuales:state.manuales, pendientes:state.pendientes, correctivos:state.correctivos, empresas:state.empresas})); }
-  catch(e){ toast('⚠️ No fue posible guardar los registros de usuario (almacenamiento lleno).'); }
-  try{ localStorage.setItem(LS_DATOS, JSON.stringify({equipos:state.equipos, registros:state.registros, meta:state.meta})); }
-  catch(e){ /* la planilla puede superar la cuota: los datos de usuario ya quedaron a salvo */ }
+  /* Prioridad: el trabajo del usuario (manuales/pendientes/correctivos) es IRRECUPERABLE; la
+     planilla (equipos/registros) siempre se puede recargar desde el Excel. Por eso, si no hay
+     espacio, se libera la planilla para hacerle sitio a los datos de usuario. */
+  const blobUsuario = JSON.stringify({manuales:state.manuales, pendientes:state.pendientes, correctivos:state.correctivos, empresas:state.empresas});
+  let okUsuario = setLS(LS_USUARIO, blobUsuario);
+  let planillaGuardada = false;
+  if(okUsuario){
+    planillaGuardada = setLS(LS_DATOS, JSON.stringify({equipos:state.equipos, registros:state.registros, meta:state.meta}));
+  } else {
+    try{ localStorage.removeItem(LS_DATOS); }catch(e){}     /* libera la planilla (recuperable) */
+    okUsuario = setLS(LS_USUARIO, blobUsuario);              /* y reintenta los datos de usuario */
+  }
+  if(okUsuario && !planillaGuardada){
+    if(!_avisoPlanillaMostrado){ _avisoPlanillaMostrado=true;
+      toast('ℹ️ La planilla no cabe en el navegador y no se guardó localmente (tus registros sí). Al reabrir, vuelve a cargar el Excel.'); }
+  } else if(okUsuario && planillaGuardada){ _avisoPlanillaMostrado=false; }
+  bannerGuardado(!okUsuario);
+}
+function bannerGuardado(critico){
+  const el=$('#aviso-guardado'); if(!el) return;
+  if(critico){ el.classList.add('activo'); }
+  else if(el.classList.contains('activo')){ el.classList.remove('activo'); toast('✅ Almacenamiento liberado: tus cambios vuelven a guardarse.'); }
 }
 function cargarLocal(){
   try{ const u=JSON.parse(localStorage.getItem(LS_USUARIO)||'null'); if(u){ state.manuales=u.manuales||[]; state.pendientes=u.pendientes||[]; state.correctivos=u.correctivos||[]; state.empresas=u.empresas||[]; } }catch(e){}
   try{ const d=JSON.parse(localStorage.getItem(LS_DATOS)||'null'); if(d){ state.equipos=d.equipos||[]; state.registros=d.registros||[]; state.meta=d.meta||null; } }catch(e){}
+  normalizarEstado();
+}
+/* Sanea el estado para tolerar respaldos antiguos, parciales o editados a mano:
+   garantiza que cada colección y cada estructura tenga su forma esperada (arrays nunca undefined). */
+function normalizarEstado(){
+  if(!Array.isArray(state.equipos)) state.equipos=[];
+  if(!Array.isArray(state.registros)) state.registros=[];
+  if(!Array.isArray(state.manuales)) state.manuales=[];
+  if(!Array.isArray(state.pendientes)) state.pendientes=[];
+  if(!Array.isArray(state.correctivos)) state.correctivos=[];
+  if(!Array.isArray(state.empresas)) state.empresas=[];
+  state.pendientes.forEach(p=>{
+    if(!Array.isArray(p.tareas)) p.tareas=[];
+    if(!Array.isArray(p.gestiones)) p.gestiones=[];
+    p.tareas.forEach(t=>{ if(t && !Array.isArray(t.comentarios)) t.comentarios=[]; if(t && !Array.isArray(t.subtareas)) t.subtareas=[]; });
+  });
+  state.correctivos.forEach(c=>{ if(!Array.isArray(c.avances)) c.avances=[]; });
 }
 
 /* =====================================================================
@@ -2385,6 +2432,7 @@ async function restaurarRespaldo(file){
     if(!confirm('Restaurar respaldo con '+det+'.\n\nEsto REEMPLAZARÁ todos los datos actuales de la aplicación. ¿Continuar?')) return;
     /* d.correctivos y d.empresas pueden no existir en respaldos de versiones anteriores */
     state = {equipos:d.equipos, registros:d.registros||[], manuales:d.manuales, pendientes:d.pendientes, correctivos:d.correctivos||[], empresas:d.empresas||[], meta:d.meta||null};
+    normalizarEstado();
     filtros={}; orden={k:null,dir:1}; busqueda=''; pagina=0; detalleKey=null; invalidar();
     $('#busqueda-global').value='';
     guardar(); renderTodo(); mostrarVista(state.equipos.length?'equipos':'carga');
@@ -3646,8 +3694,8 @@ function tablaPendientes(lista){
   const filas=lista.slice().sort((a,b)=>(a.fechaCompromiso||'').localeCompare(b.fechaCompromiso||'')).map(p=>{
     const e=equipoPorKey(p.equipoKey);
     const vencido = p.estado!=='Completado' && p.fechaCompromiso && p.fechaCompromiso<hoy;
-    const hechas=p.tareas.filter(tareaResuelta).length;
-    const ultima=p.gestiones.length?p.gestiones[p.gestiones.length-1]:null;
+    const hechas=(p.tareas||[]).filter(tareaResuelta).length;
+    const ultima=(p.gestiones&&p.gestiones.length)?p.gestiones[p.gestiones.length-1]:null;
     return `<tr class="click" data-pendiente="${p.id}">
       <td><strong>${esc(e?e.equipo:p.equipoKey)}</strong><br><small style="color:var(--gris-4)">${esc(e?('Serie '+(e.serie||'—')+' · '+(e.servicio||'')):'')}</small></td>
       <td>${esc(p.tipo)}${p.descripcion?'<br><small style="color:var(--gris-4)">'+esc(p.descripcion)+'</small>':''}</td>
@@ -4377,6 +4425,7 @@ function conectarEventos(){
   $('#btn-exportar-todo').addEventListener('click',exportarTodo);
   $('#btn-exportar-vista-todo').addEventListener('click',exportarTodo);
   $('#btn-respaldo').addEventListener('click',descargarRespaldo);
+  $('#btn-aviso-respaldo').addEventListener('click',descargarRespaldo);
   $('#btn-restaurar').addEventListener('click',()=>$('#input-respaldo').click());
   $('#input-respaldo').addEventListener('change',ev=>{ if(ev.target.files[0]) restaurarRespaldo(ev.target.files[0]); ev.target.value=''; });
 
