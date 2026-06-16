@@ -940,7 +940,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-16.32';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-16.33';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -1064,8 +1064,9 @@ const TIPO_PEND_REPROG = 'Reprogramación Mantención Preventiva';
 const ETAPA_REPRO_CLASE = {'Por generar':'rojo','Por imprimir':'ambar','Faltan 2 firmas':'ambar','Falta firma del supervisor':'ambar','Falta firma del jefe':'ambar','Firmado':'verde'};
 const ORD_REPRO = {'Por generar':0,'Por imprimir':1,'Faltan 2 firmas':2,'Falta firma del supervisor':3,'Falta firma del jefe':3,'Firmado':5};
 function esReprogramacion(p){ return /eprogram/i.test((p&&p.tipo)||''); }
-function tareasReprogramacion(causal){
-  const cz = (causal&&/^C[1-8]$/.test(causal)) ? (' (causal '+causal+')') : '';
+function tareasReprogramacion(causal, fecha){
+  const partes=[]; if(causal&&/^C[1-8]$/.test(causal)) partes.push('causal '+causal); if(fecha) partes.push(fmtFecha(fecha));
+  const cz = partes.length ? (' ('+partes.join(' · ')+')') : '';
   const mk=(clave,texto)=>({texto, hecha:false, clave});
   return [
     mk('repro_generar','Generar el reporte de reprogramación'+cz),
@@ -1073,6 +1074,20 @@ function tareasReprogramacion(causal){
     mk('repro_firma_sup','Firma del supervisor del servicio clínico'),
     mk('repro_firma_jefe','Firma del jefe de equipos médicos')
   ];
+}
+/* causal y fecha del reporte: del propio pendiente, de su MP de origen o de la descripción/tarea */
+function datosReprogDe(p){
+  let causal=(p&&p.causal)||'', fecha=(p&&p.fechaReporte)||'';
+  if((!causal||!fecha) && p&&p.origenMP){
+    const mp=state.manuales.find(m=>m.id===p.origenMP);
+    if(mp){ if(!causal && /^C[1-8]$/.test(mp.resultado||'')) causal=mp.resultado; if(!fecha) fecha=mp.fecha||''; }
+  }
+  if(!causal||!fecha){
+    const blob=((p&&p.descripcion)||'')+' '+(((p&&p.tareas)||[]).map(t=>t.texto||'').join(' '));
+    if(!causal){ const mc=blob.match(/\bC[1-8]\b/i); if(mc) causal=mc[0].toUpperCase(); }
+    if(!fecha){ const mf=((p&&p.descripcion)||'').match(/(\d{2})-(\d{2})-(\d{4})/); if(mf) fecha=mf[3]+'-'+mf[2]+'-'+mf[1]; }
+  }
+  return {causal, fecha};
 }
 /* etapa del reporte deducida de las tareas con «clave»; sin checklist aún → «Por generar» */
 function etapaReprogramacion(p){
@@ -2413,14 +2428,15 @@ function generarPendienteDesdeMP(m){
   const REPRO30=['C1','C5','C6','C7','C8'];
   const compromiso = REPRO30.includes(m.resultado) ? sumarDias(m.fecha,30) : sumarDias(hoyISO(),7);
   const tipoMant = m.tipoMantenimiento||'Interno';
-  /* Causal → ciclo del reporte de reprogramación; si no, protocolo de mantenimiento */
-  const tareas = esCausal ? tareasReprogramacion(m.resultado) : tareasProtocolo(tipoMant);
+  /* Causal → ciclo del reporte de reprogramación (con su causal y fecha); si no, protocolo */
+  const tareas = esCausal ? tareasReprogramacion(m.resultado, m.fecha) : tareasProtocolo(tipoMant);
   const desc = esCausal
     ? `Reprogramación por causal ${m.resultado} (MP del ${fmtFecha(m.fecha)}).`+(m.observaciones?' '+m.observaciones:'')
     : `Generado por MP ${tipoMant.toLowerCase()} del ${fmtFecha(m.fecha)} (resultado ${m.resultado}).`+(m.observaciones?' '+m.observaciones:'');
   return { id:uid(), creado:hoyISO(), origenMP:m.id,
     equipoKey:m.equipoKey, fechaCompromiso:compromiso, tipoMantenimiento:tipoMant,
     tipo: esCausal ? TIPO_PEND_REPROG : ('Protocolo '+tipoMant+' de Mantenimiento'),
+    causal: esCausal?m.resultado:'', fechaReporte: esCausal?(m.fecha||''):'',
     descripcion: desc,
     tareas, respAdmin:RESP_ADM_DEFECTO, respEjec:prefs.ultimoRespEje||'',
     gestiones:[{fecha:new Date().toLocaleString('es-CL'), texto: esCausal
@@ -2444,7 +2460,7 @@ function abrirModalPendiente(equipoKey, pendiente, prellenar){
   /* si el tipo es de protocolo, asegurar su lista (Sí/No/Imprimir/Gestión); si es reprogramación, su ciclo de reporte */
   const tmAbrir=TIPO_PEND_PROTOCOLO[$('#pe-tipo').value];
   if(tmAbrir) asegurarProtocoloEnTareas(tmAbrir);
-  else if($('#pe-tipo').value===TIPO_PEND_REPROG) asegurarReprogEnTareas(pendiente&&pendiente.causal);
+  else if($('#pe-tipo').value===TIPO_PEND_REPROG) asegurarReprogEnTareas();
   $('#pe-descripcion').value = pendiente?pendiente.descripcion:(prellenar&&prellenar.descripcion)||'';
   $('#pe-resp-adm').value = pendiente?pendiente.respAdmin:RESP_ADM_DEFECTO;
   $('#pe-resp-eje').value = pendiente?pendiente.respEjec:(prefs.ultimoRespEje||'');
@@ -2500,10 +2516,11 @@ function asegurarProtocoloEnTareas(tipoMant){
   tareasProtocolo(tipoMant).forEach(t=>{ if(!existentes.has(t.texto)){ peTareas.push(t); n++; } });
   return n;
 }
-/* agrega el ciclo del reporte de reprogramación si aún no está (por «clave») */
-function asegurarReprogEnTareas(causal){
+/* agrega el ciclo del reporte de reprogramación si aún no está (por «clave»), con su causal y fecha */
+function asegurarReprogEnTareas(){
   if(peTareas.some(t=>t.clave==='repro_generar')) return 0;
-  const nuevas=tareasReprogramacion(causal); peTareas.push(...nuevas); return nuevas.length;
+  const d=datosReprogDe(peEditando||{});
+  const nuevas=tareasReprogramacion(d.causal, d.fecha); peTareas.push(...nuevas); return nuevas.length;
 }
 /* si quedó texto escrito en los campos «nueva tarea» / «nueva gestión», incorporarlo antes de guardar */
 function volcarEntradasPendiente(){
@@ -3358,9 +3375,11 @@ function filasPendBase(){
     const urg=URG_TXT[grupoPendiente(p,hoy)];
     const venc = p.estado!=='Completado' && !p.esperaDe && p.fechaCompromiso && p.fechaCompromiso<hoy;
     const ult=(p.gestiones&&p.gestiones.length)?p.gestiones[p.gestiones.length-1]:null;
+    const ri = esReprogramacion(p)?datosReprogDe(p):null;
     return { id:p.id, key:p.equipoKey, p,
       equipo:e?e.equipo:p.equipoKey, serie:e?e.serie:'', inventario:e?e.inventario:'', servicio:e?e.servicio:'', tipo:p.tipo||'',
       urgencia:urg, estadoG:estadoGestionPendiente(p), repro:etapaReprogramacion(p),
+      reproInfo: ri,
       compromiso:p.fechaCompromiso||'', atraso:venc?String(diasEntre(p.fechaCompromiso,hoy)):'',
       tareas:(p.tareas&&p.tareas.length)?(p.tareas.filter(tareaResuelta).length+'/'+p.tareas.length):'',
       respAdmin:p.respAdmin||'', respEjec:p.respEjec||'',
@@ -3368,7 +3387,7 @@ function filasPendBase(){
       completado:p.fechaCompletado||'',
       /* texto buscable: datos del equipo + descripción + texto/estado/comentarios de tareas + texto de gestiones */
       _buscar:[ e?e.equipo:'', e?e.serie:'', e?e.inventario:'', e?e.servicio:'', e?e.unidad:'', e?e.ubicacion:'', e?e.marca:'', e?e.modelo:'',
-        p.tipo, p.descripcion, p.respAdmin, p.respEjec, p.esperaDe,
+        p.tipo, p.descripcion, p.respAdmin, p.respEjec, p.esperaDe, ri?ri.causal:'', ri&&ri.fecha?fmtFecha(ri.fecha):'',
         ...((p.tareas||[]).flatMap(t=>[t.texto, t.estado||'', ...((t.comentarios||[]).map(c=>c.texto)), ...((t.subtareas||[]).map(s=>s.texto))])),
         ...((p.gestiones||[]).map(g=>g.texto)) ].filter(Boolean).join(' ') };
   });
@@ -3448,7 +3467,7 @@ function renderPendientes(){
         if(c.k==='equipo') return `<td style="max-width:200px"><a href="#" data-pc-eq="${esc(f.key)}" style="color:var(--azul-osc);font-weight:600">${esc(v)}</a></td>`;
         if(c.k==='urgencia') return `<td>${v==='Atrasado'?'<span class="chip rojo">Atrasado</span>':v==='Hoy'?'<span class="chip ambar">Hoy</span>':v==='En espera'?'<span class="chip ambar">✋ En espera</span>':v==='Completado'?'<span class="chip verde">Completado</span>':'<span class="chip gris">'+esc(v)+'</span>'}</td>`;
         if(c.k==='estadoG') return `<td>${v==='Completado'?'<span class="chip verde">Completado</span>':v==='En espera'?'<span class="chip ambar">En espera</span>':v==='En gestión'?'<span class="chip azul">En gestión</span>':'<span class="chip gris">Nuevo</span>'}</td>`;
-        if(c.k==='repro') return `<td>${v?`<span class="chip ${ETAPA_REPRO_CLASE[v]||'gris'}">${esc(v)}</span>`:'—'}</td>`;
+        if(c.k==='repro'){ const ri=f.reproInfo, tt=ri&&(ri.causal||ri.fecha)?('Reporte '+(ri.causal?ri.causal+' ':'')+(ri.fecha?'· '+fmtFecha(ri.fecha):'')).trim():v; return `<td>${v?`<span class="chip ${ETAPA_REPRO_CLASE[v]||'gris'}" title="${esc(tt)}">${esc(v)}${ri&&ri.fecha?'<br><small style="opacity:.85">'+esc(ri.causal?ri.causal+' · ':'')+fmtFecha(ri.fecha)+'</small>':''}</span>`:'—'}</td>`; }
         if(c.k==='compromiso'||c.k==='completado') v=v?fmtFecha(v):'';
         if(c.k==='ultGestion') return `<td style="max-width:260px" title="${esc(v)}">${esc(v.length>80?v.slice(0,80)+'…':v)||'—'}</td>`;
         return `<td title="${esc(v)}">${esc(v)||'—'}</td>`;
