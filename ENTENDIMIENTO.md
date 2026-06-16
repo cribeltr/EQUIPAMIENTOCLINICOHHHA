@@ -8,7 +8,7 @@
 > *Está escrito en primera persona, tal como lo expliqué, para poder leerlo y confirmar que se
 > entendió todo. Si algo no calza con la realidad, se corrige aquí primero.*
 
-_Última actualización: 2026-06-16 · App build 2026-06-16.47_
+_Última actualización: 2026-06-16 · App build 2026-06-16.48_
 
 ---
 
@@ -77,9 +77,11 @@ falta para cerrar cada uno, y cuando lo oficializo en la carta, todo queda consi
   `RA` reprogramada de año anterior, `PM` puesta en marcha).
 - Cuando ejecuto un preventivo registro el detalle en la app: fecha, ejecutor, resultado,
   observaciones, **estado del equipo** y el **tipo de mantenimiento: Interno o Externo**.
+- Cuando la MP es **Externa**, registro además el **ingeniero externo y la empresa** (los datos del
+  protocolo de mantenimiento externo). Esos datos viajan al pendiente del protocolo.
 - Si queda una **gestión pendiente**, la app me crea un **pendiente** con su lista de trabajo:
-  - **Interno** → protocolo de mantenimiento interno.
-  - **Externo** → protocolo interno **y** externo.
+  - **Interno** → protocolo de mantenimiento interno (ejecutor interno + el checklist).
+  - **Externo** → protocolo interno **y** externo (con el ingeniero/empresa externos).
   - Cada protocolo se marca **Sí / No / Imprimir / Gestión**, admite comentarios, y cuando lo dejo
     en **Gestión** puedo abrir **subtareas** para detallar qué hay que gestionar.
 
@@ -128,8 +130,18 @@ Cuando un equipo falla, se abre **mantenimiento correctivo**:
   Ejecución → Cierre**, con **Trato Directo** o **Compra Ágil**.
 - Lo crítico es la **operatividad**: si el equipo queda **No Operativo** o **en Servicio Técnico**,
   cuento los **días detenido**; si siguió operativo, es el ciclo administrativo.
-- Los **envíos a servicio técnico** tienen su **N° de envío** (y el retorno se conecta con su
-  envío). Debo poder **buscar por ese número** ("¿tienes el envío 166?").
+- Los **envíos a servicio técnico** se registran como un **documento de envío** con su **N° de
+  envío**, su **responsable**, su **fecha** y la **OT** a la que se asocian (el expediente). Debo
+  poder **buscar por ese número** ("¿tienes el envío 166?").
+- Cuando el equipo **es reparado o diagnosticado por personal externo**, lo registro como un
+  **Reporte de Servicio**: **fecha, ingeniero externo, empresa y N° de reporte de servicio**, y si
+  fue **reparación o diagnóstico** (+ cómo quedó el equipo). No lleva tipo de compra y se engancha al
+  expediente abierto. La **reparación** y el **diagnóstico** externos registran los mismos datos.
+- Cuando **el equipo llega** (retorno), registro la **fecha**, el **N° de guía de despacho** y **si
+  viene o no con su reporte de reparación**. Si **no viene**, la app me deja un **pendiente** para
+  gestionarlo; también puede ser que **ya había llegado antes por correo**.
+- Los **ingenieros externos** son una **lista reutilizable** (como las empresas): los elijo rápido y
+  puedo agregar nuevos al vuelo.
 - Puedo registrar una **Visita diagnóstica** como tipo de evento del correctivo: una visita técnica
   para diagnosticar. **No implica compra** (no pide tipo de compra) y su folio es **opcional** —si el
   equipo ya tiene un expediente abierto, la visita se **engancha sola** a ese folio; si no, queda
@@ -229,6 +241,7 @@ el puente entre la app y el papel que vive en la carpeta de cada equipo.
 | 2026‑06‑16 | **Tolerancia a respaldos antiguos/editados**: al cargar, la app completa estructuras faltantes (tareas, gestiones, avances) para no caerse con datos parciales | Poder restaurar respaldos viejos o corregidos a mano sin que la aplicación falle |
 | 2026‑06‑16 | **«Visita diagnóstica» como tipo de evento correctivo**: aparece en el desplegable del modal de Correctivo, **sin pedir tipo de compra**, con folio opcional que se autocompleta con el del expediente abierto del equipo | Quería anotar una visita diagnóstica y solo tenía OT/Reporte; el formulario me empujaba a una compra que no corresponde |
 | 2026‑06‑16 | **Aclaración del concepto borrador/oficial** (secciones 2 y 5): el rojo de la carta dice «no es oficial»; el borrador de la app dice además **«y esto es lo que falta»** | Dejar registrado el porqué del borrador con detalle, que es el corazón del sistema |
+| 2026‑06‑16 | **Datos de servicios externos en correctivo y MP**: envío con **responsable**; **Reporte de Servicio** = reporte del ingeniero externo (fecha, ingeniero, empresa, N° de reporte, reparación/diagnóstico); retorno con **N° de guía de despacho** y «¿viene el reporte?» (si no, pendiente automático); **MP externa** con ingeniero externo + empresa; **lista reutilizable de ingenieros** | Registrar tal como ocurre: envíos, reparaciones/diagnósticos externos y retornos con sus datos reales, sin que el formulario me empuje a una compra |
 
 ---
 

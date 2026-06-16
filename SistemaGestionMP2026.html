@@ -753,6 +753,13 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
           <label class="check-linea" style="margin-top:7px"><input type="checkbox" id="mp-gestion"> <strong id="mp-gestion-txt">No</strong></label>
         </div>
       </div>
+      <!-- MP externa: datos del ingeniero externo para el protocolo de mantenimiento externo -->
+      <div class="sub-form" id="mp-ext-campos" style="display:none">
+        <div class="f-2col">
+          <div class="f-grupo"><label class="et">Ingeniero externo</label><select id="mp-ing-ext"></select></div>
+          <div class="f-grupo"><label class="et">Empresa</label><select id="mp-ext-empresa"></select></div>
+        </div>
+      </div>
       <div id="mp-gestion-hint" style="display:none"></div>
     </div>
     <div class="modal-pie">
@@ -888,6 +895,21 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
           </select>
         </div>
       </div>
+      <!-- Reporte de Servicio: datos del trabajo del ingeniero externo (reparación / diagnóstico) -->
+      <div class="sub-form" id="ot-servicio-ext" style="display:none">
+        <div class="f-grupo">
+          <label class="et">Tipo de servicio</label>
+          <div class="toggle-par" id="ot-servicio-tipo">
+            <button type="button" data-v="Reparación">🔧 Reparación</button>
+            <button type="button" data-v="Diagnóstico">🔎 Diagnóstico</button>
+          </div>
+        </div>
+        <div class="f-2col">
+          <div class="f-grupo"><label class="et">Ingeniero externo</label><select id="ot-ing-ext"></select></div>
+          <div class="f-grupo"><label class="et">Empresa</label><select id="ot-serv-empresa"></select></div>
+        </div>
+        <div class="f-grupo"><label class="et">N° de reporte de servicio</label><input type="text" id="ot-reporte-num" placeholder="N° del reporte de servicio del externo"></div>
+      </div>
       <div class="f-grupo" id="ot-compra-grupo">
         <label class="et">Tipo de compra</label>
         <select id="ot-compra">
@@ -1022,7 +1044,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-16.47';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-16.48';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -1204,6 +1226,7 @@ let state = {
   pendientes: [],   // Paso 9
   correctivos: [],  // Paso 10: eventos de mantenimiento correctivo
   empresas: [],     // Paso 10: empresas para compras por Trato Directo
+  ingenieros: [],   // ingenieros externos (servicio técnico / MP externa), reutilizables
   meta: null        // {archivo, fechaCarga, avisos...}
 };
 let filtros = {};                       // {campo: Set(valores)}
@@ -1263,7 +1286,7 @@ function guardar(){
   /* Prioridad: el trabajo del usuario (manuales/pendientes/correctivos) es IRRECUPERABLE; la
      planilla (equipos/registros) siempre se puede recargar desde el Excel. Por eso, si no hay
      espacio, se libera la planilla para hacerle sitio a los datos de usuario. */
-  const blobUsuario = JSON.stringify({manuales:state.manuales, pendientes:state.pendientes, correctivos:state.correctivos, empresas:state.empresas});
+  const blobUsuario = JSON.stringify({manuales:state.manuales, pendientes:state.pendientes, correctivos:state.correctivos, empresas:state.empresas, ingenieros:state.ingenieros});
   let okUsuario = setLS(LS_USUARIO, blobUsuario);
   let planillaGuardada = false;
   if(okUsuario){
@@ -1284,7 +1307,7 @@ function bannerGuardado(critico){
   else if(el.classList.contains('activo')){ el.classList.remove('activo'); toast('✅ Almacenamiento liberado: tus cambios vuelven a guardarse.'); }
 }
 function cargarLocal(){
-  try{ const u=JSON.parse(localStorage.getItem(LS_USUARIO)||'null'); if(u){ state.manuales=u.manuales||[]; state.pendientes=u.pendientes||[]; state.correctivos=u.correctivos||[]; state.empresas=u.empresas||[]; } }catch(e){}
+  try{ const u=JSON.parse(localStorage.getItem(LS_USUARIO)||'null'); if(u){ state.manuales=u.manuales||[]; state.pendientes=u.pendientes||[]; state.correctivos=u.correctivos||[]; state.empresas=u.empresas||[]; state.ingenieros=u.ingenieros||[]; } }catch(e){}
   try{ const d=JSON.parse(localStorage.getItem(LS_DATOS)||'null'); if(d){ state.equipos=d.equipos||[]; state.registros=d.registros||[]; state.meta=d.meta||null; } }catch(e){}
   normalizarEstado();
 }
@@ -1297,6 +1320,7 @@ function normalizarEstado(){
   if(!Array.isArray(state.pendientes)) state.pendientes=[];
   if(!Array.isArray(state.correctivos)) state.correctivos=[];
   if(!Array.isArray(state.empresas)) state.empresas=[];
+  if(!Array.isArray(state.ingenieros)) state.ingenieros=[];
   state.pendientes.forEach(p=>{
     if(!Array.isArray(p.tareas)) p.tareas=[];
     if(!Array.isArray(p.gestiones)) p.gestiones=[];
@@ -2414,7 +2438,7 @@ function descargarRespaldo(){
     tipo:'respaldo-gmp2026', version:2, fecha:new Date().toISOString(),
     equipos:equiposLimpios, registros:state.registros,
     manuales:state.manuales, pendientes:state.pendientes,
-    correctivos:state.correctivos, empresas:state.empresas, meta:state.meta
+    correctivos:state.correctivos, empresas:state.empresas, ingenieros:state.ingenieros, meta:state.meta
   };
   const blob = new Blob([JSON.stringify(datos)], {type:'application/json'});
   const a = document.createElement('a');
@@ -2432,7 +2456,7 @@ async function restaurarRespaldo(file){
     const det = d.equipos.length+' equipos, '+(d.registros||[]).length+' registros de planilla, '+d.manuales.length+' mantenciones de la app, '+d.pendientes.length+' pendientes y '+(d.correctivos||[]).length+' órdenes de trabajo (generado: '+(d.fecha?new Date(d.fecha).toLocaleString('es-CL'):'—')+')';
     if(!confirm('Restaurar respaldo con '+det+'.\n\nEsto REEMPLAZARÁ todos los datos actuales de la aplicación. ¿Continuar?')) return;
     /* d.correctivos y d.empresas pueden no existir en respaldos de versiones anteriores */
-    state = {equipos:d.equipos, registros:d.registros||[], manuales:d.manuales, pendientes:d.pendientes, correctivos:d.correctivos||[], empresas:d.empresas||[], meta:d.meta||null};
+    state = {equipos:d.equipos, registros:d.registros||[], manuales:d.manuales, pendientes:d.pendientes, correctivos:d.correctivos||[], empresas:d.empresas||[], ingenieros:d.ingenieros||[], meta:d.meta||null};
     normalizarEstado();
     filtros={}; orden={k:null,dir:1}; busqueda=''; pagina=0; detalleKey=null; invalidar();
     $('#busqueda-global').value='';
@@ -2473,20 +2497,24 @@ function bitacoraEquipo(key){
       const txt = (r==='Si'||r==='Si-RA') ? 'Mantención preventiva realizada'
                 : r==='FS' ? 'Mantención preventiva — Fuera de Servicio'
                 : r ? 'Mantención preventiva — '+(RESULTADOS[r]||r) : 'Mantención preventiva';
-      add(m.fecha, txt+(m.estadoEquipo?' · equipo '+m.estadoEquipo:'')+(m.ejecutor?' · '+m.ejecutor:''), m.tipoRegistro||'Borrador', (m.tipoRegistro==='Oficial')?'verde':'ambar', {t:'mp',id:m.id}, 'mp');
+      const ext = (m.tipoMantenimiento==='Externo') ? (' · externo'+(m.ingenieroExterno?' '+m.ingenieroExterno:'')+(m.empresaExterna?' ('+m.empresaExterna+')':'')) : '';
+      add(m.fecha, txt+(m.estadoEquipo?' · equipo '+m.estadoEquipo:'')+(m.ejecutor?' · '+m.ejecutor:'')+ext, m.tipoRegistro||'Borrador', (m.tipoRegistro==='Oficial')?'verde':'ambar', {t:'mp',id:m.id}, 'mp');
     }
   });
   /* 2) Mantenimiento correctivo: apertura del evento, hitos del expediente y avances */
   state.correctivos.filter(c=>c.equipoKey===key).forEach(c=>{
     const cerr=estadoEventoDe(c)==='Cerrado', refOT={t:'ot',id:c.id};
-    add(c.fechaDocumento, tipoEventoDe(c)+(c.folioSigem?' — folio '+c.folioSigem:'')+(c.requerimiento?' · '+c.requerimiento:''), cerr?'Cerrado':'Abierto', cerr?'verde':'azul', refOT, 'ot');
+    const serv = tipoEventoDe(c)==='Reporte de Servicio'
+      ? (c.tipoServicio?' ('+c.tipoServicio+')':'')+(c.ingenieroExterno?' · '+c.ingenieroExterno:'')+(c.empresa?' · '+c.empresa:'')+(c.numeroReporteServicio?' · reporte N° '+c.numeroReporteServicio:'')
+      : '';
+    add(c.fechaDocumento, tipoEventoDe(c)+(c.folioSigem?' — folio '+c.folioSigem:'')+serv+(c.requerimiento?' · '+c.requerimiento:''), cerr?'Cerrado':'Abierto', cerr?'verde':'azul', refOT, 'ot');
     if(c.informeTecnicoFecha) add(c.informeTecnicoFecha, 'Informe técnico'+(c.informeTecnicoNum?' N° '+c.informeTecnicoNum:''), 'Expediente', 'gris', refOT, 'ot');
     if(c.ordenCompraFecha) add(c.ordenCompraFecha, 'Orden de compra emitida'+(c.ordenCompraNum?' N° '+c.ordenCompraNum:''), 'Expediente', 'gris', refOT, 'ot');
     (c.avances||[]).forEach(a=>{
       if(a.tipo==='Cierre del expediente') return;   /* lo cubre la fila de cierre, sin duplicar */
       let t=a.tipo||'Avance';
-      if(a.tipo==='Envío a Servicio Técnico') t='Envío a Servicio Técnico'+(a.numeroEnvio?' · N° '+a.numeroEnvio:'')+(a.empresa?' a '+a.empresa:'');
-      else if(a.tipo==='Retorno de Servicio Técnico') t='Retorno de Servicio Técnico'+(a.folioRetorno?' · folio '+a.folioRetorno:'')+(a.empresa?' de '+a.empresa:'')+(a.estadoEquipoRetorno?' · equipo '+a.estadoEquipoRetorno:'');
+      if(a.tipo==='Envío a Servicio Técnico') t='Envío a Servicio Técnico'+(a.numeroEnvio?' · N° '+a.numeroEnvio:'')+(a.empresa?' a '+a.empresa:'')+(a.responsable?' · resp. '+a.responsable:'');
+      else if(a.tipo==='Retorno de Servicio Técnico') t='Retorno de Servicio Técnico'+(a.folioRetorno?' · guía '+a.folioRetorno:'')+(a.empresa?' de '+a.empresa:'')+(a.estadoEquipoRetorno?' · equipo '+a.estadoEquipoRetorno:'')+(a.traeReporte==='No'?' · sin reporte (gestionar)':a.traeReporte==='Correo'?' · reporte por correo':'');
       else if(a.tipo==='Visita / Ejecución realizada') t='Visita / ejecución'+(a.estadoEquipoVisita?' · equipo '+a.estadoEquipoVisita:'');
       else if(a.detalle) t=a.tipo+' · '+a.detalle;
       add(a.fecha, t, 'Avance', 'gris', refOT, 'ot');
@@ -2678,7 +2706,7 @@ function renderDetalle(key){
       <td><strong>${esc(tipoEventoDe(c))}</strong></td>
       <td>${fmtFecha(c.fechaDocumento)}</td>
       <td>${esc(c.folioSigem)||'—'}</td>
-      <td style="max-width:240px">${esc(c.requerimiento)||'—'}${tipoEventoDe(c)==='Envío a Servicio Técnico'&&(c.empresa||c.numeroEnvio)?'<br><small style="color:var(--gris-4)">Enviado a: '+esc(c.empresa||'—')+(c.numeroEnvio?' · Envío N° '+esc(c.numeroEnvio):'')+'</small>':''}${c.gestionPendiente?'<br><span class="chip ambar">Gestión pendiente</span>':''}</td>
+      <td style="max-width:240px">${esc(c.requerimiento)||'—'}${tipoEventoDe(c)==='Envío a Servicio Técnico'&&(c.empresa||c.numeroEnvio)?'<br><small style="color:var(--gris-4)">Enviado a: '+esc(c.empresa||'—')+(c.numeroEnvio?' · Envío N° '+esc(c.numeroEnvio):'')+'</small>':''}${tipoEventoDe(c)==='Reporte de Servicio'&&(c.ingenieroExterno||c.numeroReporteServicio||c.tipoServicio)?'<br><small style="color:var(--gris-4)">'+esc(c.tipoServicio||'Servicio')+(c.ingenieroExterno?' · '+esc(c.ingenieroExterno):'')+(c.empresa?' · '+esc(c.empresa):'')+(c.numeroReporteServicio?' · reporte N° '+esc(c.numeroReporteServicio):'')+'</small>':''}${c.gestionPendiente?'<br><span class="chip ambar">Gestión pendiente</span>':''}</td>
       <td>${esc(c.tecnico)}</td>
       <td style="max-width:260px">${compra}</td>
       <td>${est==='Operativo'?'<span class="chip verde">Operativo</span>':est==='Servicio Técnico'?'<span class="chip ambar">Servicio Técnico</span>':'<span class="chip rojo">No Operativo</span>'}</td>
@@ -2749,6 +2777,10 @@ function abrirModalMP(equipoKey, registro){
   setToggle('mp-estado', registro?registro.estadoEquipo:'Operativo', CLASES_ESTADO);
   setToggle('mp-tipo', registro?registro.tipoRegistro:'Borrador', CLASES_TIPO);
   setToggle('mp-tipo-mant', registro?(registro.tipoMantenimiento||'Interno'):'Interno', CLASES_MANT);
+  /* MP externa: ingeniero externo + empresa (para el protocolo de mantenimiento externo) */
+  $('#mp-ing-ext').innerHTML = opcionesIngenieros(registro?(registro.ingenieroExterno||''):'');
+  $('#mp-ext-empresa').innerHTML = opcionesEmpresas(registro?(registro.empresaExterna||''):'');
+  toggleMPExterno();
   $('#mp-gestion').checked = registro?!!registro.gestionPendiente:false;
   $('#mp-gestion-txt').textContent = $('#mp-gestion').checked?'Sí':'No';
   $('#mp-programacion').dataset.auto = registro?'0':'1';
@@ -2757,6 +2789,11 @@ function abrirModalMP(equipoKey, registro){
   actualizarHintMP();
   actualizarHintGestionMP();
   $('#modal-mp').classList.add('abierto');
+}
+/* MP externa: muestra los campos de ingeniero/empresa solo cuando el tipo es Externo */
+function toggleMPExterno(){
+  const ext = (valToggle('mp-tipo-mant')||'Interno')==='Externo';
+  const c=$('#mp-ext-campos'); if(c) c.style.display = ext?'':'none';
 }
 /* aviso de qué tareas de protocolo se crearán si se deja gestión pendiente */
 function actualizarHintGestionMP(){
@@ -2793,6 +2830,8 @@ function guardarMP(){
     estadoEquipo:valToggle('mp-estado')||'Operativo',
     gestionPendiente:$('#mp-gestion').checked,
     tipoMantenimiento:valToggle('mp-tipo-mant')||'Interno',
+    ingenieroExterno: (valToggle('mp-tipo-mant')==='Externo') ? ($('#mp-ing-ext').value==='__nuevo__'?'':$('#mp-ing-ext').value) : '',
+    empresaExterna: (valToggle('mp-tipo-mant')==='Externo') ? ($('#mp-ext-empresa').value==='__nueva__'?'':$('#mp-ext-empresa').value) : '',
     tipoRegistro:valToggle('mp-tipo')||'Borrador'
   };
   let mp;
@@ -2819,11 +2858,14 @@ function generarPendienteDesdeMP(m){
   const tipoMant = m.tipoMantenimiento||'Interno';
   /* Causal → ciclo del reporte de reprogramación (con su causal y fecha); si no, protocolo */
   const tareas = esCausal ? tareasReprogramacion(m.resultado, m.fecha) : tareasProtocolo(tipoMant);
+  const extInfo = (tipoMant==='Externo' && (m.ingenieroExterno||m.empresaExterna))
+    ? ` Ingeniero externo: ${m.ingenieroExterno||'—'}${m.empresaExterna?' ('+m.empresaExterna+')':''}.` : '';
   const desc = esCausal
     ? `Reprogramación por causal ${m.resultado} (MP del ${fmtFecha(m.fecha)}).`+(m.observaciones?' '+m.observaciones:'')
-    : `Generado por MP ${tipoMant.toLowerCase()} del ${fmtFecha(m.fecha)} (resultado ${m.resultado}).`+(m.observaciones?' '+m.observaciones:'');
+    : `Generado por MP ${tipoMant.toLowerCase()} del ${fmtFecha(m.fecha)} (resultado ${m.resultado}).`+extInfo+(m.observaciones?' '+m.observaciones:'');
   return { id:uid(), creado:hoyISO(), origenMP:m.id,
     equipoKey:m.equipoKey, fechaCompromiso:compromiso, tipoMantenimiento:tipoMant,
+    ingenieroExterno:m.ingenieroExterno||'', empresaExterna:m.empresaExterna||'',
     tipo: esCausal ? TIPO_PEND_REPROG : ('Protocolo '+tipoMant+' de Mantenimiento'),
     causal: esCausal?m.resultado:'', fechaReporte: esCausal?(m.fecha||''):'',
     descripcion: desc,
@@ -3176,8 +3218,8 @@ function calcularDerivadosEquipos(){
   /* índice de texto correctivo por equipo: folio SIGEM, N° de envío, técnico, empresa… (búsqueda global) */
   const corrBuscaPorEq={};
   state.correctivos.forEach(c=>{
-    const parts=[c.folioSigem||'', c.numeroEnvio||'', c.tecnico||'', c.empresa||'', c.requerimiento||'', c.informeTecnicoNum||'', c.ordenCompraNum||''];
-    (c.avances||[]).forEach(a=>{ parts.push(a.numeroEnvio||'', a.folioRetorno||'', a.empresa||'', a.detalle||''); });
+    const parts=[c.folioSigem||'', c.numeroEnvio||'', c.tecnico||'', c.empresa||'', c.requerimiento||'', c.informeTecnicoNum||'', c.ordenCompraNum||'', c.ingenieroExterno||'', c.numeroReporteServicio||''];
+    (c.avances||[]).forEach(a=>{ parts.push(a.numeroEnvio||'', a.folioRetorno||'', a.empresa||'', a.detalle||'', a.responsable||''); });
     (corrBuscaPorEq[c.equipoKey]=corrBuscaPorEq[c.equipoKey]||[]).push(parts.filter(Boolean).join(' '));
   });
   state.equipos.forEach(e=>{
@@ -3385,6 +3427,26 @@ function opcionesEmpresas(sel){
     ops.map(x=>`<option ${x===sel?'selected':''}>${esc(x)}</option>`).join('')+
     '<option value="__nueva__">➕ Agregar nueva empresa…</option>';
 }
+function opcionesIngenieros(sel){
+  const ops = (state.ingenieros||[]).slice();
+  if(sel && !ops.includes(sel)) ops.push(sel);
+  ops.sort((a,b)=>a.localeCompare(b,'es'));
+  return '<option value="">— Seleccionar —</option>'+
+    ops.map(x=>`<option ${x===sel?'selected':''}>${esc(x)}</option>`).join('')+
+    '<option value="__nuevo__">➕ Agregar nuevo ingeniero…</option>';
+}
+/* Conecta un <select> de ingenieros con el alta rápida «➕ Agregar nuevo ingeniero…» */
+function enlazarSelectIngeniero(sel){
+  if(!sel) return;
+  sel.addEventListener('change',ev=>{
+    if(ev.target.value!=='__nuevo__') return;
+    const nombre=(prompt('Nombre del ingeniero externo:')||'').trim();
+    if(nombre){
+      if(!state.ingenieros.some(x=>x.toLowerCase()===nombre.toLowerCase())){ state.ingenieros.push(nombre); guardar(); }
+      ev.target.innerHTML=opcionesIngenieros(nombre);
+    } else ev.target.value='';
+  });
+}
 let avEditando=null;   /* {ot, av} cuando se está corrigiendo un avance de la bitácora */
 function abrirModalAvance(otId, tipoForzado){
   const ot=state.correctivos.find(c=>c.id===otId); if(!ot) return;
@@ -3482,6 +3544,7 @@ function renderAvExtra(){
         <div class="f-grupo"><label class="et">Empresa de destino <span class="req">*</span></label><select id="av-env-empresa">${opcionesEmpresas('')}</select></div>
         <div class="f-grupo"><label class="et">N° de envío <span class="req">*</span></label><input type="text" id="av-env-numero" placeholder="N° del documento de envío"></div>
       </div>
+      <div class="f-grupo"><label class="et">Responsable del envío ${op}</label><select id="av-env-responsable"><option value="">— Seleccionar —</option>${EJECUTORES.map(nm=>`<option>${esc(nm)}</option>`).join('')}</select></div>
       <small style="color:var(--gris-4)">El equipo quedará en estado <strong>Servicio Técnico</strong> desde la fecha del envío, hasta su retorno (Visita / Ejecución) o cierre.</small>
     </div>`;
   } else if(t==='Retorno de Servicio Técnico'){
@@ -3489,13 +3552,14 @@ function renderAvExtra(){
     x.innerHTML=`<div class="sub-form">
       ${env?`<div class="aviso" style="margin:0">↩ Retorna del <strong>envío N° ${esc(env.numero||'—')}</strong> a <strong>${esc(env.empresa||'—')}</strong> del ${fmtFecha(env.f)} · OT folio <strong>${esc(ot.folioSigem||'—')}</strong></div>`:'<div class="aviso ambar" style="margin:0">Este expediente no tiene envíos registrados.</div>'}
       <div class="f-2col">
-        <div class="f-grupo"><label class="et">Folio de retorno <span class="req">*</span></label><input type="text" id="av-ret-folio" placeholder="N° guía / documento de retorno"></div>
+        <div class="f-grupo"><label class="et">N° de guía de despacho <span class="req">*</span></label><input type="text" id="av-ret-folio" placeholder="N° de la guía de despacho"></div>
         <div class="f-grupo"><label class="et">Empresa <span class="req">*</span></label><select id="av-ret-empresa">${opcionesEmpresas(env?env.empresa:'')}</select></div>
       </div>
       <div class="f-2col">
         <div class="f-grupo"><label class="et">Enviado por <span style="color:var(--gris-4);font-weight:400">(persona de la empresa, opcional)</span></label><input type="text" id="av-ret-enviadopor"></div>
         <div class="f-grupo"><label class="et">¿Cómo quedó el equipo?</label><select id="av-ret-estado"><option>Operativo</option><option>No Operativo</option></select></div>
       </div>
+      <div class="f-grupo"><label class="et">¿Viene con su reporte de reparación?</label><select id="av-ret-reporte"><option value="Sí">Sí, lo trae</option><option value="No">No — hay que gestionarlo</option><option value="Correo">Ya había llegado antes por correo</option></select></div>
     </div>`;
   } else if(t==='Visita / Ejecución realizada'){
     x.innerHTML=`<div class="sub-form"><div class="f-grupo"><label class="et">¿Cómo quedó el equipo tras la visita?</label><select id="av-visita-estado"><option>Operativo</option><option>No Operativo</option><option>Servicio Técnico</option></select></div></div>`;
@@ -3516,11 +3580,13 @@ function capturarExtrasAvance(av, tipo){
   } else if(tipo==='Envío a Servicio Técnico'){
     const emp=$('#av-env-empresa').value; av.empresa = emp==='__nueva__'?'':emp;
     av.numeroEnvio=$('#av-env-numero').value.trim();
+    const resp=$('#av-env-responsable'); if(resp) av.responsable=resp.value;
   } else if(tipo==='Retorno de Servicio Técnico'){
-    av.folioRetorno=$('#av-ret-folio').value.trim();
+    av.folioRetorno=$('#av-ret-folio').value.trim();          /* N° de guía de despacho */
     const emp=$('#av-ret-empresa').value; av.empresa = emp==='__nueva__'?'':emp;
     av.enviadoPor=$('#av-ret-enviadopor').value.trim();
     av.estadoEquipoRetorno=$('#av-ret-estado').value;
+    const rep=$('#av-ret-reporte'); if(rep) av.traeReporte=rep.value;
   } else if(tipo==='Visita / Ejecución realizada'){
     av.estadoEquipoVisita=$('#av-visita-estado').value;
   } else if(tipo==='Cierre del expediente'){
@@ -3531,7 +3597,7 @@ function guardarAvance(){
   const ot=state.correctivos.find(c=>c.id===$('#modal-avance').dataset.ot); if(!ot) return;
   const tipo=$('#av-tipo').value, fecha=$('#av-fecha').value;
   if(!tipo||!fecha){ toast('⚠️ Indica el tipo de avance y la fecha del hecho.'); return; }
-  let txtOk;
+  let txtOk, pendienteRetornoNuevo=null;
   if(avEditando && avEditando.ot===ot){
     /* corrección: actualiza el avance en su lugar, conserva la fecha de registro y recalcula el expediente */
     const av=avEditando.av;
@@ -3550,15 +3616,26 @@ function guardarAvance(){
     const av={id:uid(), tipo, fecha, detalle:$('#av-detalle').value.trim(), registrado:new Date().toISOString()};
     capturarExtrasAvance(av, tipo);
     if(tipo==='Envío a Servicio Técnico' && (!av.empresa||!av.numeroEnvio)){ toast('⚠️ Indica la empresa de destino y el N° de envío.'); return; }
-    if(tipo==='Retorno de Servicio Técnico' && (!av.folioRetorno||!av.empresa)){ toast('⚠️ Indica el folio de retorno y la empresa.'); return; }
+    if(tipo==='Retorno de Servicio Técnico' && (!av.folioRetorno||!av.empresa)){ toast('⚠️ Indica la N° de guía de despacho y la empresa.'); return; }
     aplicarAvance(ot, av);
     txtOk='✅ Avance registrado: '+tipo+'.';
+    /* Retorno sin su reporte de reparación → deja un pendiente listo para gestionarlo */
+    if(tipo==='Retorno de Servicio Técnico' && av.traeReporte==='No' && !state.pendientes.some(p=>p.origenRetorno===av.id)){
+      pendienteRetornoNuevo={ id:uid(), creado:hoyISO(), origenRetorno:av.id, origenOT:ot.id,
+        equipoKey:ot.equipoKey, fechaCompromiso:fecha, tipo:'Otro',
+        descripcion:`Falta el reporte de reparación del retorno (guía ${av.folioRetorno||'—'}) · OT folio ${ot.folioSigem||'—'}${av.empresa?' · gestionar con '+av.empresa:''}.`,
+        tareas:[], respAdmin:RESP_ADM_DEFECTO, respEjec:prefs.ultimoRespEje||'',
+        gestiones:[{fecha:new Date().toLocaleString('es-CL'), texto:'Generado automáticamente: el equipo retornó sin su reporte de reparación.'}],
+        estado:'Abierto', fechaCompletado:'', esperaDe:'' };
+      state.pendientes.push(pendienteRetornoNuevo);
+    }
   }
   const folio=(ot.folioSigem||'').trim();
   const ejec=state.correctivos.filter(c=>c!==ot && (c.folioSigem||'').trim()===folio && c.fechaDocumento).map(c=>c.fechaDocumento);
   const avisos=avisosOrden(hitosExpediente(ot, ejec));
   guardar(); cerrarModal('modal-avance'); renderTodo();
   toast(avisos.length ? '⚠️ Guardado, pero revisa el orden: '+avisos[0] : txtOk);
+  if(pendienteRetornoNuevo) toast('📋 Pendiente creado: gestionar el reporte de reparación que faltó en el retorno.');
 }
 function abrirModalOT(equipoKey, ot){
   const e=equipoPorKey(equipoKey); if(!e) return;
@@ -3585,20 +3662,25 @@ function toggleCierreUI(){
   $('#ot-cierre-grupo').style.display = valToggle('ot-estado-evento')==='Cerrado' ? '' : 'none';
 }
 function ajustarFormOTSegunTipo(){
-  /* Envío a Servicio Técnico: fecha de envío, empresa, descripción, folio de solicitud y técnico responsable.
-     Visita diagnóstica: no implica compra, su folio es opcional (sirve solo para engancharla a un expediente). */
+  /* Envío a ST: fecha de envío, empresa, folio de solicitud, técnico responsable.
+     Visita diagnóstica y Reporte de Servicio: no implican compra y su folio es opcional
+     (sirve para engancharlos a un expediente). El Reporte de Servicio es el del ingeniero externo. */
   const tipo = $('#ot-tipo-evento').value;
   const esEnvio = tipo==='Envío a Servicio Técnico';
   const esVisita = tipo==='Visita diagnóstica';
-  $('#ot-fecha-label').textContent = esEnvio?'Fecha de envío':(esVisita?'Fecha de la visita':'Fecha del documento');
-  $('#ot-req-label').textContent = esEnvio?'Descripción':(esVisita?'Hallazgo / motivo de la visita':'Requerimiento');
-  $('#ot-folio-label').textContent = esEnvio?'Folio de solicitud':(esVisita?'Folio del expediente':'Folio de Solicitud de SIGEM');
-  $('#ot-tecnico-label').textContent = esEnvio?'Técnico responsable':(esVisita?'Técnico que visita':'Técnico asignado');
-  $('#ot-requerimiento').placeholder = esEnvio?'Describe el envío: falla, accesorios incluidos, condiciones…':(esVisita?'Qué se diagnosticó, qué falla presenta, qué se requiere…':'Describe el requerimiento del documento…');
+  const esReporte = tipo==='Reporte de Servicio';
+  const sinCompra = esVisita || esReporte;        /* ni la visita ni el reporte de servicio llevan compra */
+  const folioOpcional = esVisita || esReporte;    /* su folio solo engancha al expediente */
+  $('#ot-fecha-label').textContent = esEnvio?'Fecha de envío':(esVisita?'Fecha de la visita':(esReporte?'Fecha del servicio':'Fecha del documento'));
+  $('#ot-req-label').textContent = esEnvio?'Descripción':(esVisita?'Hallazgo / motivo de la visita':(esReporte?'Trabajo realizado / observaciones':'Requerimiento'));
+  $('#ot-folio-label').textContent = esEnvio?'Folio de solicitud':(folioOpcional?'Folio del expediente':'Folio de Solicitud de SIGEM');
+  $('#ot-tecnico-label').textContent = esEnvio?'Técnico responsable':(esVisita?'Técnico que visita':(esReporte?'Recibe / supervisa (interno)':'Técnico asignado'));
+  $('#ot-requerimiento').placeholder = esEnvio?'Describe el envío: falla, accesorios incluidos, condiciones…':(esVisita?'Qué se diagnosticó, qué falla presenta, qué se requiere…':(esReporte?'Qué hizo el ingeniero: reparación, repuestos, diagnóstico…':'Describe el requerimiento del documento…'));
   $('#ot-env-grupo').style.display = esEnvio?'':'none';
-  $('#ot-compra-grupo').style.display = esVisita?'none':'';
-  if(esVisita) $('#ot-compra-det').style.display='none';
-  $('#ot-folio-req').style.display = esVisita?'none':'';
+  $('#ot-servicio-ext').style.display = esReporte?'':'none';
+  $('#ot-compra-grupo').style.display = sinCompra?'none':'';
+  if(sinCompra) $('#ot-compra-det').style.display='none';
+  $('#ot-folio-req').style.display = folioOpcional?'none':'';
 }
 function cargarFormOT(ot){
   otEditando = ot||null;
@@ -3610,6 +3692,11 @@ function cargarFormOT(ot){
   $('#ot-estado').value = ot?estadoCorrectivoDe(ot.estadoEquipo):'Operativo';
   $('#ot-env-empresa').innerHTML = opcionesEmpresas(ot?(ot.empresa||''):'');
   $('#ot-env-numero').value = ot?(ot.numeroEnvio||''):'';
+  /* Reporte de Servicio: datos del ingeniero externo */
+  $('#ot-ing-ext').innerHTML = opcionesIngenieros(ot?(ot.ingenieroExterno||''):'');
+  $('#ot-serv-empresa').innerHTML = opcionesEmpresas(ot?(ot.empresa||''):'');
+  $('#ot-reporte-num').value = ot?(ot.numeroReporteServicio||''):'';
+  setToggle('ot-servicio-tipo', ot?(ot.tipoServicio||'Reparación'):'Reparación', null);
   ajustarFormOTSegunTipo();
   $('#ot-compra').value = ot?(ot.tipoCompra||''):'';
   $('#ot-informe-num').value = ot?(ot.informeTecnicoNum||''):'';
@@ -3632,9 +3719,15 @@ function guardarOT(){
   const equipoKey=$('#modal-ot').dataset.equipo;
   const tipoEvento=$('#ot-tipo-evento').value, fecha=$('#ot-fecha').value,
         folio=$('#ot-folio').value.trim(), tec=$('#ot-tecnico').value;
-  /* La visita diagnóstica no es un documento SIGEM: su folio es opcional y nunca lleva compra */
+  /* Visita diagnóstica y Reporte de Servicio no son documentos SIGEM: folio opcional, sin compra.
+     El Reporte de Servicio es trabajo del ingeniero externo, así que tampoco exige técnico interno. */
   const esVisita = tipoEvento==='Visita diagnóstica';
-  if(!tipoEvento||!fecha||!tec||(!esVisita && !folio)){ toast('⚠️ Completa tipo de evento, fecha'+(esVisita?'':', folio de solicitud')+' y técnico.'); return; }
+  const esReporte = tipoEvento==='Reporte de Servicio';
+  const folioOpcional = esVisita || esReporte;
+  const tecOpcional = esReporte;
+  if(!tipoEvento||!fecha){ toast('⚠️ Indica el tipo de evento y la fecha.'); return; }
+  if(!folioOpcional && !folio){ toast('⚠️ Completa el folio de solicitud SIGEM.'); return; }
+  if(!tecOpcional && !tec){ toast('⚠️ Indica el técnico asignado.'); return; }
   /* Envío a Servicio Técnico exige la empresa de destino y el N° de envío */
   let empresaEnvio='', numeroEnvio='';
   if(tipoEvento==='Envío a Servicio Técnico'){
@@ -3642,8 +3735,9 @@ function guardarOT(){
     numeroEnvio=$('#ot-env-numero').value.trim();
     if(!empresaEnvio||!numeroEnvio){ toast('⚠️ Indica la empresa de destino y el N° de envío.'); return; }
   }
-  /* Tipo de compra: Trato Directo exige informe técnico (n°, fecha, responsable) y empresa. La visita nunca lleva compra. */
-  const tipoCompra=esVisita?'':$('#ot-compra').value;
+  /* Tipo de compra: Trato Directo exige informe técnico (n°, fecha, responsable) y empresa.
+     Ni la visita diagnóstica ni el reporte de servicio llevan compra. */
+  const tipoCompra=(esVisita||esReporte)?'':$('#ot-compra').value;
   let informeNum='', informeFecha='', informeResp='', empresa='', ordenCompraNum='', ordenCompraFecha='', ordenCompraDesc='';
   if(tipoCompra){
     ordenCompraNum=$('#ot-oc-num').value.trim();
@@ -3658,6 +3752,15 @@ function guardarOT(){
     if(!informeNum||!informeFecha||!informeResp||!empresa){ toast('⚠️ Para Trato Directo completa N° de informe técnico, fecha, responsable del informe y empresa.'); return; }
   }
   if(!empresa && empresaEnvio) empresa=empresaEnvio;
+  /* Reporte de Servicio: datos del ingeniero externo (reparación / diagnóstico) */
+  let ingenieroExterno='', numeroReporteServicio='', tipoServicio='';
+  if(esReporte){
+    const ie=$('#ot-ing-ext').value; ingenieroExterno = ie==='__nuevo__'?'':ie;
+    numeroReporteServicio=$('#ot-reporte-num').value.trim();
+    tipoServicio=valToggle('ot-servicio-tipo')||'Reparación';
+    const se=$('#ot-serv-empresa').value; const empServ = se==='__nueva__'?'':se;
+    if(empServ) empresa=empServ;
+  }
   /* Cierre del evento */
   const estadoEvento = valToggle('ot-estado-evento')||'Abierto';
   const fechaCierre = estadoEvento==='Cerrado' ? $('#ot-cierre-fecha').value : '';
@@ -3667,6 +3770,7 @@ function guardarOT(){
     estadoEquipo:$('#ot-estado').value||'Operativo',
     tipoCompra, informeTecnicoNum:informeNum, informeTecnicoFecha:informeFecha,
     informeTecnicoResp:informeResp, empresa, ordenCompraNum, ordenCompraFecha, ordenCompraDesc,
+    ingenieroExterno, numeroReporteServicio, tipoServicio,
     estadoEvento, fechaCierre,
     gestionPendiente:$('#ot-gestion').checked,
     tipoRegistro:valToggle('ot-tipo-reg')||'Oficial' };
@@ -4575,9 +4679,10 @@ function conectarEventos(){
   /* Modal Mantenimiento Correctivo (Paso 10) */
   $('#ot-tipo-evento').addEventListener('change',()=>{
     ajustarFormOTSegunTipo();
-    if(!otEditando && $('#ot-tipo-evento').value==='Envío a Servicio Técnico') $('#ot-estado').value='Servicio Técnico';
-    /* Visita diagnóstica nueva: la enganchamos al expediente abierto del equipo (folio prellenado y editable) */
-    if(!otEditando && $('#ot-tipo-evento').value==='Visita diagnóstica' && !$('#ot-folio').value.trim()){
+    const v=$('#ot-tipo-evento').value;
+    if(!otEditando && v==='Envío a Servicio Técnico') $('#ot-estado').value='Servicio Técnico';
+    /* Visita diagnóstica o Reporte de Servicio nuevos: los enganchamos al expediente abierto del equipo (folio prellenado y editable) */
+    if(!otEditando && (v==='Visita diagnóstica'||v==='Reporte de Servicio') && !$('#ot-folio').value.trim()){
       const eq=equipoPorKey($('#modal-ot').dataset.equipo);
       if(eq && eq._otAbierta && eq._otAbierta.folio) $('#ot-folio').value=eq._otAbierta.folio;
     }
@@ -4599,6 +4704,17 @@ function conectarEventos(){
       renderEmpresaSelect(nombre);
     } else ev.target.value='';
   });
+  /* Reporte de Servicio: alta rápida de empresa e ingeniero externo, y toggle reparación/diagnóstico */
+  $('#ot-serv-empresa').addEventListener('change',ev=>{
+    if(ev.target.value!=='__nueva__') return;
+    const nombre=(prompt('Nombre de la nueva empresa:')||'').trim();
+    if(nombre){
+      if(!state.empresas.some(x=>x.toLowerCase()===nombre.toLowerCase())){ state.empresas.push(nombre); guardar(); }
+      ev.target.innerHTML=opcionesEmpresas(nombre);
+    } else ev.target.value='';
+  });
+  enlazarSelectIngeniero($('#ot-ing-ext'));
+  $$('#ot-servicio-tipo button').forEach(b=>b.addEventListener('click',()=>setToggle('ot-servicio-tipo',b.dataset.v,null)));
   $('#ot-gestion').addEventListener('change',ev=>$('#ot-gestion-txt').textContent=ev.target.checked?'Sí':'No');
   $$('#ot-estado-evento button').forEach(b=>b.addEventListener('click',()=>{
     setToggle('ot-estado-evento',b.dataset.v,{'Abierto':'sel-azul','Cerrado':'sel-verde'});
@@ -4636,7 +4752,16 @@ function conectarEventos(){
   $('#mp-gestion').addEventListener('change',ev=>{ $('#mp-gestion-txt').textContent=ev.target.checked?'Sí':'No'; actualizarHintGestionMP(); });
   $$('#mp-estado button').forEach(b=>b.addEventListener('click',()=>setToggle('mp-estado',b.dataset.v,CLASES_ESTADO)));
   $$('#mp-tipo button').forEach(b=>b.addEventListener('click',()=>setToggle('mp-tipo',b.dataset.v,CLASES_TIPO)));
-  $$('#mp-tipo-mant button').forEach(b=>b.addEventListener('click',()=>{ setToggle('mp-tipo-mant',b.dataset.v,CLASES_MANT); actualizarHintGestionMP(); }));
+  $$('#mp-tipo-mant button').forEach(b=>b.addEventListener('click',()=>{ setToggle('mp-tipo-mant',b.dataset.v,CLASES_MANT); toggleMPExterno(); actualizarHintGestionMP(); }));
+  enlazarSelectIngeniero($('#mp-ing-ext'));
+  $('#mp-ext-empresa').addEventListener('change',ev=>{
+    if(ev.target.value!=='__nueva__') return;
+    const nombre=(prompt('Nombre de la nueva empresa:')||'').trim();
+    if(nombre){
+      if(!state.empresas.some(x=>x.toLowerCase()===nombre.toLowerCase())){ state.empresas.push(nombre); guardar(); }
+      ev.target.innerHTML=opcionesEmpresas(nombre);
+    } else ev.target.value='';
+  });
   $('#mp-guardar').addEventListener('click',guardarMP);
 
   /* Modal Pendiente */
