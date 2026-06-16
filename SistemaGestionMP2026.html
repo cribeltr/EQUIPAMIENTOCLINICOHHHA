@@ -941,7 +941,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-16.36';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-16.37';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -1062,8 +1062,8 @@ const TIPO_PEND_PROTOCOLO = {'Protocolo Interno de Mantenimiento':'Interno','Pro
    El reporte de reprogramación se genera, se imprime y lleva dos firmas:
    la del supervisor del servicio clínico y la del jefe de equipos médicos. */
 const TIPO_PEND_REPROG = 'Reprogramación Mantención Preventiva';
-const ETAPA_REPRO_CLASE = {'Por generar':'rojo','Por imprimir':'ambar','Faltan 2 firmas':'ambar','Falta firma del supervisor':'ambar','Falta firma del jefe':'ambar','Firmado':'verde'};
-const ORD_REPRO = {'Por generar':0,'Por imprimir':1,'Faltan 2 firmas':2,'Falta firma del supervisor':3,'Falta firma del jefe':3,'Firmado':5};
+const ETAPA_REPRO_CLASE = {'Por generar':'rojo','Por imprimir':'ambar','Faltan 2 firmas':'ambar','Falta firma del supervisor':'ambar','Falta firma del jefe':'ambar','Firmado':'azul','Oficializado':'verde'};
+const ORD_REPRO = {'Por generar':0,'Por imprimir':1,'Faltan 2 firmas':2,'Falta firma del supervisor':3,'Falta firma del jefe':3,'Firmado':5,'Oficializado':6};
 function esReprogramacion(p){ return /eprogram/i.test((p&&p.tipo)||''); }
 function tareasReprogramacion(causal, fecha){
   const partes=[]; if(causal&&/^C[1-8]$/.test(causal)) partes.push('causal '+causal); if(fecha) partes.push(fmtFecha(fecha));
@@ -1090,7 +1090,17 @@ function datosReprogDe(p){
   }
   return {causal, fecha};
 }
-/* etapa del reporte deducida de las tareas con «clave»; sin checklist aún → «Por generar» */
+/* mes (0-11) → columna del Resultado en la hoja Registro_MP-2026 (para indicar dónde escribir el código) */
+function colResultadoMes(mes){ return (MESES_REG_COLS[mes]&&MESES_REG_COLS[mes][1])||''; }
+/* ¿la planilla ya trae el resultado oficial para el equipo+mes del reporte? (se escribió el C6 y se recargó) */
+function reprogOficializada(p){
+  if(!esReprogramacion(p)) return false;
+  const d=datosReprogDe(p); if(!d.fecha) return false;
+  const mes=parseInt(d.fecha.slice(5,7),10)-1;
+  return state.registros.some(r=>r.equipoKey===p.equipoKey && r.mes===mes && r.resultado);
+}
+/* etapa del reporte deducida de las tareas con «clave»; sin checklist aún → «Por generar».
+   Tras las firmas: «Firmado» (por oficializar en el Excel) → «Oficializado» cuando la planilla ya trae el código. */
 function etapaReprogramacion(p){
   if(!esReprogramacion(p) || (p&&p.estado==='Completado')) return '';
   const tar=p.tareas||[]; const by=k=>tar.find(t=>t.clave===k);
@@ -1102,7 +1112,7 @@ function etapaReprogramacion(p){
   if(!fs&&!fj) return 'Faltan 2 firmas';
   if(!fs) return 'Falta firma del supervisor';
   if(!fj) return 'Falta firma del jefe';
-  return 'Firmado';
+  return reprogOficializada(p) ? 'Oficializado' : 'Firmado';
 }
 
 /* ---------- Estado de la aplicación ---------- */
@@ -1330,6 +1340,9 @@ async function cargarArchivo(file){
     renderTodo();
     mostrarVista('carga');
     toast('✅ Planilla cargada: '+state.equipos.length+' equipos.');
+    /* reprogramaciones firmadas cuyo código ya quedó en la planilla → listas para cerrar */
+    const ofi=state.pendientes.filter(p=>esReprogramacion(p) && p.estado!=='Completado' && etapaReprogramacion(p)==='Oficializado').length;
+    if(ofi) setTimeout(()=>toast('✅ '+ofi+' reprogramación'+(ofi>1?'es':'')+' oficializada'+(ofi>1?'s':'')+' en la planilla — ciérrala'+(ofi>1?'s':'')+' en Pendientes (chip «oficializado · cerrar»).'),1600);
   }catch(err){
     console.error(err);
     $('#card-resumen').style.display='none';
@@ -2782,7 +2795,9 @@ function decidirSiguienteAccion(e){
   else if(noOper||enST)     add(2, 'Equipo '+e._estado.toLowerCase()+' sin OT · abrir correctivo', 'correctivo');
   else if(ot)               add(3, 'Avanzar expediente · '+ot.etapa+(ot.dias!=null?' · '+ot.dias+' d':''), 'correctivo');
   if(e._pendVencidos)       add(4, e._pendVencidos+' pendiente'+(e._pendVencidos>1?'s':'')+' vencido'+(e._pendVencidos>1?'s':'')+' · resolver', 'pendiente');
-  if(e._reproEtapa)         add(5, 'Reporte de reprogramación · '+e._reproEtapa.toLowerCase(), 'reprograma');
+  if(e._reproEtapa)         add(5, e._reproEtapa==='Firmado' ? 'Reporte de reprogramación firmado · oficializar (escribir el código en el Excel)'
+                                  : e._reproEtapa==='Oficializado' ? 'Reporte de reprogramación oficializado · cerrar el pendiente'
+                                  : 'Reporte de reprogramación · '+e._reproEtapa.toLowerCase(), 'reprograma');
   if(e._protoSinResolver)   add(5, e._protoSinResolver+' protocolo'+(e._protoSinResolver>1?'s':'')+' sin resolver', 'protocolo');
   if(e._mpMesPend)          add(6, 'MP de '+MESES[new Date().getMonth()]+' programada · ejecutar', 'mp');
   if(e._mpVencidas)         add(7, e._mpVencidas+' MP de meses anteriores sin ejecutar', 'mp');
@@ -3389,7 +3404,19 @@ function filaExpandida(p){
   }).join('')}</div>`:'<small style="color:var(--gris-4)">Sin tareas.</small>';
   const gestiones=(p.gestiones||[]).slice().reverse().map(g=>`<div class="log-item"><time>${esc(g.fecha)}</time>${esc(g.texto)}</div>`).join('')||'<small style="color:var(--gris-4)">Sin gestiones registradas.</small>';
   const input = p.estado==='Completado' ? '' : `<div class="pc-gestion-in" style="margin-top:8px"><input type="text" data-pc-gestion="${p.id}" placeholder="➕ Registrar gestión… (Enter)"></div>`;
+  /* banner de oficialización para reprogramaciones firmadas / oficializadas */
+  let reproBanner='';
+  if(esReprogramacion(p) && p.estado!=='Completado'){
+    const et=etapaReprogramacion(p), d=datosReprogDe(p), e=equipoPorKey(p.equipoKey);
+    if(et==='Firmado'){
+      const mes=d.fecha?parseInt(d.fecha.slice(5,7),10)-1:null, col=mes!=null?colResultadoMes(mes):'';
+      reproBanner=`<div class="aviso azul" style="margin-bottom:12px">📤 <strong>Listo para oficializar.</strong> Escribe <strong>${esc(d.causal||'el código')}</strong> en la hoja <strong>Registro_MP-2026</strong>${mes!=null?`, en el <strong>Resultado de ${MESES[mes]}</strong> (columna <strong>${col}</strong>)`:''}, fila del equipo (Serie <strong>${esc(e?e.serie:'—')}</strong> · Inv. <strong>${esc(e?e.inventario:'—')}</strong>). Al recargar la planilla pasará a «Oficializado».</div>`;
+    } else if(et==='Oficializado'){
+      reproBanner=`<div class="aviso verde" style="margin-bottom:12px">✅ <strong>Oficializado en la planilla</strong> (${esc(d.causal||'código')} ya cargado). Puedes <strong>cerrar este pendiente</strong> con el botón ✔.</div>`;
+    }
+  }
   return `<tr class="pend-exp"><td colspan="${colsPendVisibles().length+1}">
+    ${reproBanner}
     <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:18px;padding:8px 6px">
       <div><h3 style="margin:0 0 8px">Tareas</h3>${tareasHtml}
         ${p.descripcion?`<div style="margin-top:10px;font-size:.85rem"><strong>Descripción:</strong> ${esc(p.descripcion)}</div>`:''}
@@ -3460,20 +3487,24 @@ function renderPendientes(){
   const thead=$('#thead-pend');
   if(!thead) return;
   const m=metricasPendientes();
-  /* reportes de reprogramación abiertos: por generar / por imprimir / por firmar */
+  /* reportes de reprogramación abiertos · embudo: generar → imprimir → firmar → oficializar → cerrar */
   const reproAb=filasPendBase().filter(f=>f.repro && f.p.estado!=='Completado');
   const rGen=reproAb.filter(f=>f.repro==='Por generar').length;
   const rImp=reproAb.filter(f=>f.repro==='Por imprimir').length;
   const rFir=reproAb.filter(f=>/firma/i.test(f.repro)).length;
+  const rOfi=reproAb.filter(f=>f.repro==='Firmado').length;
+  const rCer=reproAb.filter(f=>f.repro==='Oficializado').length;
   $('#pend-metricas').innerHTML = `
     <span class="chip azul">${m.abiertos} abierto${m.abiertos!==1?'s':''}</span>
     ${m.atrasados?`<span class="chip rojo">⚠ ${m.atrasados} atrasado${m.atrasados!==1?'s':''}</span>`:''}
     ${m.espera?`<span class="chip ambar">✋ ${m.espera} en espera</span>`:''}
     <span class="chip verde">✔ ${m.compSemana} completado${m.compSemana!==1?'s':''} esta semana</span>
     ${m.tMedio!==null?`<span class="chip gris">⏱ resolución media: ${m.tMedio} día${m.tMedio!==1?'s':''}</span>`:''}
-    ${rGen?`<span class="chip rojo" data-repro-filtro="Por generar" style="cursor:pointer" title="Filtrar reportes por generar">📄 ${rGen} reporte${rGen!==1?'s':''} por generar</span>`:''}
+    ${rGen?`<span class="chip rojo" data-repro-filtro="Por generar" style="cursor:pointer" title="Filtrar reportes por generar">📄 ${rGen} por generar</span>`:''}
     ${rImp?`<span class="chip ambar" data-repro-filtro="Por imprimir" style="cursor:pointer" title="Filtrar reportes por imprimir">🖨 ${rImp} por imprimir</span>`:''}
-    ${rFir?`<span class="chip ambar" data-repro-filtro="firma" style="cursor:pointer" title="Filtrar reportes que esperan firma">✍ ${rFir} por firmar</span>`:''}`;
+    ${rFir?`<span class="chip ambar" data-repro-filtro="firma" style="cursor:pointer" title="Filtrar reportes que esperan firma">✍ ${rFir} por firmar</span>`:''}
+    ${rOfi?`<span class="chip azul" data-repro-filtro="Firmado" style="cursor:pointer" title="Firmados: por escribir el código en el Excel">📤 ${rOfi} por oficializar</span>`:''}
+    ${rCer?`<span class="chip verde" data-repro-filtro="Oficializado" style="cursor:pointer" title="Oficializados en la planilla: listos para cerrar el pendiente">✅ ${rCer} oficializado${rCer!==1?'s':''} · cerrar</span>`:''}`;
   const COLSV=colsPendVisibles();
   thead.innerHTML = COLSV.map(c=>{
     const filtrado=!!filtrosPend[c.k];
@@ -4257,12 +4288,13 @@ function conectarEventos(){
   /* Bandeja de pendientes (tabla tipo Excel) */
   $('#busqueda-pend').addEventListener('input', debounce(()=>{ busquedaPend=$('#busqueda-pend').value; renderPendientes(); },180));
   $('#btn-limpiar-pend').addEventListener('click',()=>{ filtrosPend={}; ordenPend={k:null,dir:1}; busquedaPend=''; $('#busqueda-pend').value=''; renderPendientes(); });
-  /* chips de acceso rápido a los reportes de reprogramación (por generar / imprimir / firmar) */
+  /* chips de acceso rápido al embudo de reportes de reprogramación; los agrupa por servicio
+     (útil para juntar las firmas del supervisor de cada servicio clínico) */
   $('#pend-metricas').addEventListener('click',ev=>{
     const ch=ev.target.closest('[data-repro-filtro]'); if(!ch) return;
     const f=ch.dataset.reproFiltro;
     const vals = f==='firma' ? ['Faltan 2 firmas','Falta firma del supervisor','Falta firma del jefe'] : [f];
-    filtrosPend.repro = new Set(vals); ordenPend={k:null,dir:1}; renderPendientes();
+    filtrosPend.repro = new Set(vals); ordenPend={k:'servicio',dir:1}; renderPendientes();
   });
   $('#btn-cols-pend').addEventListener('click',ev=>{ ev.stopPropagation(); abrirSelectorColumnasPend(ev.currentTarget); });
   $('#btn-exportar-pend').addEventListener('click',exportarPendientesVista);
