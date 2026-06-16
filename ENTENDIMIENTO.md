@@ -8,7 +8,7 @@
 > *Está escrito en primera persona, tal como lo expliqué, para poder leerlo y confirmar que se
 > entendió todo. Si algo no calza con la realidad, se corrige aquí primero.*
 
-_Última actualización: 2026-06-16 · App build 2026-06-16.43_
+_Última actualización: 2026-06-16 · App build 2026-06-16.44_
 
 ---
 
@@ -144,6 +144,13 @@ estado, en orden cronológico (órdenes de trabajo, reprogramaciones, mantencion
 cierres, pendientes). Es el relato de *qué le ha pasado y cuándo* — el complemento histórico del
 estado actual.
 
+Como apoyo a la operatividad existe también el **panel de Verificación**: la app revisa sola la
+**consistencia de los datos** y me lista las situaciones que merecen una mirada (equipos detenidos
+sin OT que los respalde, expedientes sin avance hace semanas, reportes de reprogramación vencidos o
+firmados sin oficializar, MP de meses pasados sin resultado, FS/NU sin resolución, envíos sin
+retorno, pendientes muy atrasados). Cada hallazgo lleva directo a la ficha del equipo. **No inventa
+ni descarta nada**: solo señala lo que no calza para que yo decida.
+
 ---
 
 ## 9. Principios que deben guiar la aplicación final
@@ -191,6 +198,7 @@ estado actual.
 | 2026‑06‑16 | **Bitácora filtrable**: chips por categoría (Preventivo/Reprogramación/Correctivo/Pendiente) y búsqueda | Encontrar rápido lo que busco dentro de la historia del equipo |
 | 2026‑06‑16 | **Registro rápido de avances correctivos** (➕ Avance) desde la vista Correctivos, sin entrar a la ficha | Reviso carpetas y necesito registrar envíos/recepciones rápido; la vía actual era lenta |
 | 2026‑06‑16 | **Grabación más inteligente**: captura la entidad de cada clic y detecta **clics muertos** | Que la grabación me sirva para que infieras lo que busco con cada clic |
+| 2026‑06‑16 | **Panel de Verificación de inconsistencias**: la app revisa la calidad de los datos (detenidos sin OT, expedientes estancados, reportes vencidos/firmados sin oficializar, MP vencidas, FS/NU sin resolver, envíos sin retorno, pendientes muy atrasados); cada hallazgo abre la ficha | Detectar de una lo que no calza, sin descartar ni inventar nada, para corregirlo antes de oficializar |
 
 ---
 

@@ -162,6 +162,14 @@ table.equipos tbody tr:hover td{background:var(--azul-claro)}
 .inicio-card.azul{border-left-color:var(--azul)} .inicio-card.azul .ic-n{color:var(--azul)}
 .inicio-card.verde{border-left-color:var(--verde)} .inicio-card.verde .ic-n{color:var(--verde)}
 .inicio-card.morado{border-left-color:var(--morado)} .inicio-card.morado .ic-n{color:var(--morado)}
+.verif-grupo{border:1px solid var(--gris-2);border-left:5px solid var(--gris-3);border-radius:11px;padding:13px 16px;margin-bottom:14px;background:#fff}
+.verif-grupo.rojo{border-left-color:var(--rojo)}
+.verif-grupo.ambar{border-left-color:var(--ambar)}
+.verif-grupo.gris{border-left-color:var(--gris-4)}
+.verif-cab{display:flex;align-items:center;gap:10px;font-size:1.02rem}
+.verif-items{display:flex;flex-wrap:wrap;gap:8px}
+.verif-item{border:1px solid var(--gris-2);background:var(--gris-1);color:var(--tinta);border-radius:8px;padding:7px 12px;font-size:.85rem;cursor:pointer;text-align:left;transition:box-shadow .12s,border-color .12s}
+.verif-item:hover{border-color:var(--azul);box-shadow:var(--sombra)}
 .bit-filtros{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-bottom:10px}
 .bit-chip{border:1px solid var(--gris-3);background:#fff;color:var(--tinta);border-radius:999px;padding:4px 12px;font-size:.82rem;cursor:pointer}
 .bit-chip:hover{border-color:var(--gris-4)}
@@ -342,6 +350,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
     <button data-vista="pendientes">📋 Pendientes <span class="nbadge" id="badge-pend" style="display:none"></span></button>
     <button data-vista="correctivos">🔩 Correctivos <span class="nbadge" id="badge-corr" style="display:none"></span></button>
     <button data-vista="operatividad">🩺 Operatividad <span class="nbadge" id="badge-oper" style="display:none"></span></button>
+    <button data-vista="verificacion">🔎 Verificación <span class="nbadge" id="badge-verif" style="display:none"></span></button>
     <button data-vista="codigos">📖 Códigos y Reglas</button>
     <button id="btn-grabar" class="grabar" title="Graba localmente tus interacciones (clics, escritura, tiempos) y exporta un archivo para análisis de mejoras. Nada sale de este computador.">🔴 Grabar</button>
   </nav>
@@ -580,6 +589,15 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
     <h2>🩺 Operatividad de equipos</h2>
     <p class="sub">El último estado conocido de cada equipo que requiere atención: no operativos, en servicio técnico, con expediente correctivo abierto, o marcados FS/NU en la planilla sin resolución posterior. Presiona una fila para abrir la ficha.</p>
     <div id="lista-operatividad"></div>
+  </div>
+</section>
+
+<!-- ============ VISTA: VERIFICACIÓN ============ -->
+<section class="vista" id="vista-verificacion">
+  <div class="card">
+    <h2>🔎 Verificación de inconsistencias</h2>
+    <p class="sub">Revisa la calidad de los datos: cosas que no deberían quedar así y conviene resolver, para que nada se te pase. Presiona un equipo para abrir su ficha.</p>
+    <div id="verif-cont"></div>
   </div>
 </section>
 
@@ -973,7 +991,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-16.43';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-16.44';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -1439,11 +1457,12 @@ function mostrarVista(id){
   if(id==='correctivos') renderCorrectivos();
   if(id==='pendientes') renderPendientes();
   if(id==='operatividad') renderOperatividad();
+  if(id==='verificacion') renderVerificacion();
   window.scrollTo({top:0});
 }
 function renderTodo(){
   calcularDerivadosEquipos(); invalidar(); invalidarPlan();
-  renderInicio(); renderResumen(); renderTabla(); renderPlan(); renderPendientes(); renderCorrectivos(); renderOperatividad(); renderBadges();
+  renderInicio(); renderResumen(); renderTabla(); renderPlan(); renderPendientes(); renderCorrectivos(); renderOperatividad(); renderVerificacion(); renderBadges();
   if(detalleKey) renderDetalle(detalleKey);
 }
 /* ---------- Tablero de Inicio: «¿qué hago hoy?» ---------- */
@@ -1505,6 +1524,9 @@ function renderBadges(){
   const bO=$('#badge-oper');
   bO.style.display = nOper?'':'none';
   bO.textContent = nOper;
+  const nVerif = nVerificaciones();
+  const bV=$('#badge-verif');
+  if(bV){ bV.style.display=nVerif?'':'none'; bV.textContent=nVerif; }
 }
 
 /* ---------- Tablero de Operatividad ---------- */
@@ -1547,6 +1569,72 @@ function renderOperatividad(){
   }).join('');
   $('#lista-operatividad').innerHTML = resumen + `<div style="overflow:auto"><table class="lista">
     <tr><th>Equipo</th><th>Último estado</th><th>Última gestión / situación</th><th>Días</th><th>Siguiente acción</th></tr>${filas}</table></div>`;
+}
+
+/* ---------- Verificación de inconsistencias (calidad de datos) ---------- */
+function verificaciones(){
+  const hoy=hoyISO(), eq=state.equipos, grupos=[];
+  const push=(grav,titulo,desc,items)=>{ if(items.length) grupos.push({grav,titulo,desc,items}); };
+  /* 1) equipos detenidos sin OT abierta */
+  push('alta','Equipos detenidos sin OT abierta','Están No Operativos o en Servicio Técnico pero no tienen un expediente correctivo abierto que respalde la gestión.',
+    eq.filter(e=>(e._estado==='No Operativo'||e._estado==='Servicio Técnico') && !e._otAbierta)
+      .map(e=>({key:e.key, txt:`${e.equipo} · Inv. ${e.inventario} · ${e._estado}${e._diasEstado?' ('+e._diasEstado+' d)':''}`})));
+  /* 2) expedientes abiertos sin avance > 21 días */
+  const estancadas=[];
+  expedientesDe(state.correctivos).map(nodosExpediente).forEach(x=>{
+    if(x.cerrado) return;
+    const fechas=[x.ot.fechaDocumento, ...(x.ot.avances||[]).map(a=>a.fecha)].filter(Boolean).sort();
+    const ult=fechas[fechas.length-1], d=ult?diasEntre(ult,hoy):null;
+    if(d!=null && d>21){ const e=equipoPorKey(x.ot.equipoKey); estancadas.push({key:x.ot.equipoKey, txt:`${e?e.equipo:''} · folio ${x.ot.folioSigem||'—'} · sin avance hace ${d} d · ${etapaActualDe(x)}`}); }
+  });
+  push('alta','Expedientes abiertos sin avance (>21 días)','Órdenes de trabajo abiertas que llevan más de tres semanas sin un nuevo avance registrado.', estancadas);
+  /* 3) reportes firmados sin oficializar */
+  push('media','Reportes de reprogramación firmados sin oficializar','Ya tienen las dos firmas; falta escribir el código en la planilla y recargar para que queden oficiales.',
+    filasPendBase().filter(f=>f.repro==='Firmado' && f.p.estado!=='Completado')
+      .map(f=>({key:f.key, txt:`${f.equipo} · ${f.reproInfo&&f.reproInfo.causal?f.reproInfo.causal+' · ':''}falta escribir el código en la planilla`})));
+  /* 4) reportes de reprogramación vencidos (por generar/imprimir/firmar) */
+  push('media','Reportes de reprogramación vencidos','Reprogramaciones cuyo reporte está atrasado (por generar, imprimir o firmar).',
+    filasPendBase().filter(f=>f.repro && /generar|imprimir|firma/i.test(f.repro) && f.atraso && f.p.estado!=='Completado')
+      .map(f=>({key:f.key, txt:`${f.equipo} · ${f.repro} · vencido hace ${f.atraso} d`})));
+  /* 5) MP de meses anteriores sin resultado */
+  push('media','MP de meses anteriores sin ejecutar','Mantenciones programadas en meses ya pasados que no tienen resultado en la planilla ni en la app.',
+    eq.filter(e=>e._mpVencidas>0).map(e=>({key:e.key, txt:`${e.equipo} · Inv. ${e.inventario} · ${e._mpVencidas} MP sin resultado`})));
+  /* 6) FS/NU en planilla sin resolución posterior */
+  push('media','FS/NU en planilla sin resolución','Resultados Fuera de Servicio / No Ubicable sin un Si o Si-RA posterior que los resuelva.',
+    eq.filter(e=>e._fsNu).map(e=>({key:e.key, txt:`${e.equipo} · Inv. ${e.inventario} · ${e._fsNu} sin resolución posterior`})));
+  /* 7) envíos a ST sin retorno (>30 días) con el equipo aún fuera */
+  const sinRetorno=[];
+  state.correctivos.forEach(c=>{
+    const avs=(c.avances||[]).slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+    let envio=null;
+    avs.forEach(a=>{ if(a.tipo==='Envío a Servicio Técnico') envio=a; else if(a.tipo==='Retorno de Servicio Técnico') envio=null; });
+    if(envio && envio.fecha){ const d=diasEntre(envio.fecha,hoy); if(d>30){ const e=equipoPorKey(c.equipoKey); sinRetorno.push({key:c.equipoKey, txt:`${e?e.equipo:''} · Envío N° ${envio.numeroEnvio||'—'} a ${envio.empresa||'—'} · sin retorno hace ${d} d`}); } }
+  });
+  push('media','Envíos a Servicio Técnico sin retorno (>30 días)','Equipos enviados a servicio técnico hace más de un mes sin que se registre su retorno.', sinRetorno);
+  /* 8) pendientes vencidos hace > 30 días (sin espera) */
+  push('baja','Pendientes muy atrasados (>30 días)','Pendientes vencidos hace más de un mes que siguen sin resolverse ni quedar en espera.',
+    state.pendientes.filter(p=>p.estado!=='Completado' && !p.esperaDe && p.fechaCompromiso && diasEntre(p.fechaCompromiso,hoy)>30)
+      .map(p=>{ const e=equipoPorKey(p.equipoKey); return {key:p.equipoKey, txt:`${e?e.equipo:p.equipoKey} · ${p.tipo||''} · vencido hace ${diasEntre(p.fechaCompromiso,hoy)} d`}; }));
+  return grupos;
+}
+function nVerificaciones(){ return verificaciones().reduce((a,g)=>a+g.items.length,0); }
+function renderVerificacion(){
+  const cont=$('#verif-cont'); if(!cont) return;
+  if(!state.equipos.length){ cont.innerHTML='<div class="vacio">Carga la planilla para verificar la consistencia de los datos.</div>'; return; }
+  const grupos=verificaciones();
+  const total=grupos.reduce((a,g)=>a+g.items.length,0);
+  if(!total){ cont.innerHTML='<div class="vacio">✅ Sin inconsistencias detectadas. Todo en orden.</div>'; return; }
+  const GRAV={alta:['rojo','🔴'], media:['ambar','🟠'], baja:['gris','⚪']};
+  cont.innerHTML = `<div class="inicio-hoy" style="margin-bottom:14px">Se detectaron <strong>${total}</strong> situación${total!==1?'es':''} a revisar en <strong>${grupos.length}</strong> categoría${grupos.length!==1?'s':''}.</div>`
+    + grupos.map(g=>{
+    const [clase,ico]=GRAV[g.grav]||GRAV.media;
+    const items=g.items.slice(0,80);
+    return `<div class="verif-grupo ${clase}">
+      <div class="verif-cab"><span class="chip ${clase}">${ico} ${g.items.length}</span><strong>${esc(g.titulo)}</strong></div>
+      <p class="sub" style="margin:4px 0 8px">${esc(g.desc)}</p>
+      <div class="verif-items">${items.map(it=>`<button class="verif-item" data-verif-eq="${esc(it.key)}">${esc(it.txt)}</button>`).join('')}${g.items.length>80?`<span style="color:var(--gris-4);font-size:.85rem">… y ${g.items.length-80} más</span>`:''}</div>
+    </div>`;
+  }).join('');
 }
 
 /* ---------- Resumen de carga ---------- */
@@ -4486,6 +4574,12 @@ function conectarEventos(){
   $('#lista-operatividad').addEventListener('click',ev=>{
     const tr=ev.target.closest('tr[data-oper-eq]');
     if(tr) abrirDetalle(tr.dataset.operEq);
+  });
+
+  /* Verificación de inconsistencias: cada ítem abre la ficha del equipo */
+  $('#verif-cont').addEventListener('click',ev=>{
+    const it=ev.target.closest('[data-verif-eq]');
+    if(it) abrirDetalle(it.dataset.verifEq);
   });
 
   /* Bandeja de pendientes (tabla tipo Excel) */
