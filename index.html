@@ -820,6 +820,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
         <select id="ot-tipo-evento">
           <option value="Orden de Trabajo">Orden de Trabajo</option>
           <option value="Reporte de Servicio">Reporte de Servicio</option>
+          <option value="Visita diagnóstica">Visita diagnóstica</option>
           <option value="Envío a Servicio Técnico" disabled hidden>Envío a Servicio Técnico (ahora es un avance del expediente)</option>
         </select>
       </div>
@@ -845,7 +846,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
           <input type="date" id="ot-fecha">
         </div>
         <div class="f-grupo">
-          <label class="et"><span id="ot-folio-label">Folio de Solicitud de SIGEM</span> <span class="req">*</span></label>
+          <label class="et"><span id="ot-folio-label">Folio de Solicitud de SIGEM</span> <span class="req" id="ot-folio-req">*</span></label>
           <input type="text" id="ot-folio" placeholder="N° de folio SIGEM">
         </div>
       </div>
@@ -863,7 +864,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
           </select>
         </div>
       </div>
-      <div class="f-grupo">
+      <div class="f-grupo" id="ot-compra-grupo">
         <label class="et">Tipo de compra</label>
         <select id="ot-compra">
           <option value="">— Sin compra asociada —</option>
@@ -997,7 +998,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-16.46';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-16.47';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -3560,14 +3561,20 @@ function toggleCierreUI(){
   $('#ot-cierre-grupo').style.display = valToggle('ot-estado-evento')==='Cerrado' ? '' : 'none';
 }
 function ajustarFormOTSegunTipo(){
-  /* Envío a Servicio Técnico: fecha de envío, empresa, descripción, folio de solicitud y técnico responsable */
-  const esEnvio = $('#ot-tipo-evento').value==='Envío a Servicio Técnico';
-  $('#ot-fecha-label').textContent = esEnvio?'Fecha de envío':'Fecha del documento';
-  $('#ot-req-label').textContent = esEnvio?'Descripción':'Requerimiento';
-  $('#ot-folio-label').textContent = esEnvio?'Folio de solicitud':'Folio de Solicitud de SIGEM';
-  $('#ot-tecnico-label').textContent = esEnvio?'Técnico responsable':'Técnico asignado';
-  $('#ot-requerimiento').placeholder = esEnvio?'Describe el envío: falla, accesorios incluidos, condiciones…':'Describe el requerimiento del documento…';
+  /* Envío a Servicio Técnico: fecha de envío, empresa, descripción, folio de solicitud y técnico responsable.
+     Visita diagnóstica: no implica compra, su folio es opcional (sirve solo para engancharla a un expediente). */
+  const tipo = $('#ot-tipo-evento').value;
+  const esEnvio = tipo==='Envío a Servicio Técnico';
+  const esVisita = tipo==='Visita diagnóstica';
+  $('#ot-fecha-label').textContent = esEnvio?'Fecha de envío':(esVisita?'Fecha de la visita':'Fecha del documento');
+  $('#ot-req-label').textContent = esEnvio?'Descripción':(esVisita?'Hallazgo / motivo de la visita':'Requerimiento');
+  $('#ot-folio-label').textContent = esEnvio?'Folio de solicitud':(esVisita?'Folio del expediente':'Folio de Solicitud de SIGEM');
+  $('#ot-tecnico-label').textContent = esEnvio?'Técnico responsable':(esVisita?'Técnico que visita':'Técnico asignado');
+  $('#ot-requerimiento').placeholder = esEnvio?'Describe el envío: falla, accesorios incluidos, condiciones…':(esVisita?'Qué se diagnosticó, qué falla presenta, qué se requiere…':'Describe el requerimiento del documento…');
   $('#ot-env-grupo').style.display = esEnvio?'':'none';
+  $('#ot-compra-grupo').style.display = esVisita?'none':'';
+  if(esVisita) $('#ot-compra-det').style.display='none';
+  $('#ot-folio-req').style.display = esVisita?'none':'';
 }
 function cargarFormOT(ot){
   otEditando = ot||null;
@@ -3601,7 +3608,9 @@ function guardarOT(){
   const equipoKey=$('#modal-ot').dataset.equipo;
   const tipoEvento=$('#ot-tipo-evento').value, fecha=$('#ot-fecha').value,
         folio=$('#ot-folio').value.trim(), tec=$('#ot-tecnico').value;
-  if(!tipoEvento||!fecha||!folio||!tec){ toast('⚠️ Completa tipo de evento, fecha, folio de solicitud y técnico.'); return; }
+  /* La visita diagnóstica no es un documento SIGEM: su folio es opcional y nunca lleva compra */
+  const esVisita = tipoEvento==='Visita diagnóstica';
+  if(!tipoEvento||!fecha||!tec||(!esVisita && !folio)){ toast('⚠️ Completa tipo de evento, fecha'+(esVisita?'':', folio de solicitud')+' y técnico.'); return; }
   /* Envío a Servicio Técnico exige la empresa de destino y el N° de envío */
   let empresaEnvio='', numeroEnvio='';
   if(tipoEvento==='Envío a Servicio Técnico'){
@@ -3609,8 +3618,8 @@ function guardarOT(){
     numeroEnvio=$('#ot-env-numero').value.trim();
     if(!empresaEnvio||!numeroEnvio){ toast('⚠️ Indica la empresa de destino y el N° de envío.'); return; }
   }
-  /* Tipo de compra: Trato Directo exige informe técnico (n°, fecha, responsable) y empresa */
-  const tipoCompra=$('#ot-compra').value;
+  /* Tipo de compra: Trato Directo exige informe técnico (n°, fecha, responsable) y empresa. La visita nunca lleva compra. */
+  const tipoCompra=esVisita?'':$('#ot-compra').value;
   let informeNum='', informeFecha='', informeResp='', empresa='', ordenCompraNum='', ordenCompraFecha='', ordenCompraDesc='';
   if(tipoCompra){
     ordenCompraNum=$('#ot-oc-num').value.trim();
@@ -4543,6 +4552,11 @@ function conectarEventos(){
   $('#ot-tipo-evento').addEventListener('change',()=>{
     ajustarFormOTSegunTipo();
     if(!otEditando && $('#ot-tipo-evento').value==='Envío a Servicio Técnico') $('#ot-estado').value='Servicio Técnico';
+    /* Visita diagnóstica nueva: la enganchamos al expediente abierto del equipo (folio prellenado y editable) */
+    if(!otEditando && $('#ot-tipo-evento').value==='Visita diagnóstica' && !$('#ot-folio').value.trim()){
+      const eq=equipoPorKey($('#modal-ot').dataset.equipo);
+      if(eq && eq._otAbierta && eq._otAbierta.folio) $('#ot-folio').value=eq._otAbierta.folio;
+    }
   });
   $('#ot-env-empresa').addEventListener('change',ev=>{
     if(ev.target.value!=='__nueva__') return;

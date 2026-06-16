@@ -8,7 +8,7 @@
 > *Está escrito en primera persona, tal como lo expliqué, para poder leerlo y confirmar que se
 > entendió todo. Si algo no calza con la realidad, se corrige aquí primero.*
 
-_Última actualización: 2026-06-16 · App build 2026-06-16.46_
+_Última actualización: 2026-06-16 · App build 2026-06-16.47_
 
 ---
 
@@ -32,15 +32,24 @@ Trabajo con **dos soportes**, y entender la diferencia es la clave de todo:
 |---|---|---|
 | Qué es | El **documento oficial** | El **detalle y el borrador** |
 | Qué guarda | **Solo resultados** (códigos: `Si`, `C1–C8`, `FS`, `No`, `NU`, `Baja`, `Si-RA`) | **Todo el detalle** que la carta no guarda (ejecutor, fechas reales, observaciones, gestiones, documentos, firmas, expedientes…) |
-| Estado | Lo que está en la carta es **oficial** | Lo que registro en la app es **borrador** hasta que lo oficializo |
+| Estado | Lo que está en la carta es **oficial**; lo no oficial lo marco **en rojo** | Lo que registro en la app es **borrador** hasta que lo oficializo |
 
 - **La carta solo registra resultados, no detalles.** Por eso la aplicación me ayuda: ahí pongo
   el detalle, hago seguimiento y veo qué falta.
+- **Qué significa «oficial» para mí:** un registro es oficial **cuando archivo los documentos en la
+  carpeta física del equipo y escribo el resultado en la carta**. Antes de eso, no es oficial.
+- **El rojo de la carta es binario; el borrador de la app es el detalle.** En la carta, sin el
+  programa, yo completo lo que tengo y lo marco **en rojo** para saber que aún no es oficial. Pero el
+  rojo no dice **qué falta**: por ejemplo, una causal **C6 en rojo** que no está en la carpeta —
+  ¿falta generar el reporte de reprogramación?, ¿falta imprimirlo?, ¿faltan las firmas? *No se sabe.*
+  El concepto de **borrador** en la app es ese mismo «no oficial», **pero con todo el detalle**: me
+  dice exactamente en qué etapa está y qué falta para oficializarlo.
 - **El puente entre los dos mundos** es la regla **Borrador → Oficial**: lo que registro en la app
   como *Borrador* pasa a *Oficial* cuando **recargo la carta** y esa mantención ya aparece con su
   resultado. Si no aparece, sigue como borrador.
 
 > En una frase: **la app es donde trabajo y acumulo el detalle; la carta es donde queda lo oficial.**
+> El rojo de la carta dice «esto no es oficial»; el borrador de la app dice además **«y esto es lo que falta»**.
 
 ---
 
@@ -103,6 +112,10 @@ oficializar / oficializado) y, cuando está firmado, me indica **exactamente qu�
 columna del Excel** escribir. Cuando recargo la carta con ese código, la app lo detecta y me
 recuerda **cerrar** el pendiente.
 
+> Esta es exactamente la diferencia con el **rojo de la carta** (sección 2): donde el Excel solo
+> dice «esta C6 no es oficial», la app responde **«está por generar / por imprimir / le faltan
+> firmas / lista para oficializar»**. Ese es el «borrador con mucho más detalle» que necesito.
+
 ---
 
 ## 6. Mantenimiento Correctivo
@@ -117,6 +130,10 @@ Cuando un equipo falla, se abre **mantenimiento correctivo**:
   cuento los **días detenido**; si siguió operativo, es el ciclo administrativo.
 - Los **envíos a servicio técnico** tienen su **N° de envío** (y el retorno se conecta con su
   envío). Debo poder **buscar por ese número** ("¿tienes el envío 166?").
+- Puedo registrar una **Visita diagnóstica** como tipo de evento del correctivo: una visita técnica
+  para diagnosticar. **No implica compra** (no pide tipo de compra) y su folio es **opcional** —si el
+  equipo ya tiene un expediente abierto, la visita se **engancha sola** a ese folio; si no, queda
+  como un evento suelto. Igual que el resto, puede quedar **Borrador** hasta archivar su documento.
 
 ---
 
@@ -210,6 +227,8 @@ el puente entre la app y el papel que vive en la carpeta de cada equipo.
 | 2026‑06‑16 | **Imprimir ficha del equipo** («🖨 Imprimir ficha»): hoja limpia con identificación, estado, siguiente acción y bitácora completa + línea de firma, lista para la carpeta física | Necesito una versión en papel ordenada para archivar en la carpeta física de cada equipo |
 | 2026‑06‑16 | **Resguardo ante almacenamiento lleno**: si el navegador no puede guardar, la app prioriza mi trabajo (mantenciones/pendientes/correctivos) liberando la planilla (que se recupera del Excel) y, si aun así no cabe, muestra un aviso fijo para descargar respaldo de inmediato | Que nunca pierda mi trabajo en silencio aunque el navegador se quede sin espacio |
 | 2026‑06‑16 | **Tolerancia a respaldos antiguos/editados**: al cargar, la app completa estructuras faltantes (tareas, gestiones, avances) para no caerse con datos parciales | Poder restaurar respaldos viejos o corregidos a mano sin que la aplicación falle |
+| 2026‑06‑16 | **«Visita diagnóstica» como tipo de evento correctivo**: aparece en el desplegable del modal de Correctivo, **sin pedir tipo de compra**, con folio opcional que se autocompleta con el del expediente abierto del equipo | Quería anotar una visita diagnóstica y solo tenía OT/Reporte; el formulario me empujaba a una compra que no corresponde |
+| 2026‑06‑16 | **Aclaración del concepto borrador/oficial** (secciones 2 y 5): el rojo de la carta dice «no es oficial»; el borrador de la app dice además **«y esto es lo que falta»** | Dejar registrado el porqué del borrador con detalle, que es el corazón del sistema |
 
 ---
 
