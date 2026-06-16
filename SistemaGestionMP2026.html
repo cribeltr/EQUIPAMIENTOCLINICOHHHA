@@ -508,7 +508,8 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
       <button class="btn mini" id="btn-limpiar-pend" style="display:none">✕ Limpiar filtros</button>
       <span class="contador" id="contador-pend"></span>
       <span style="flex:1"></span>
-      <button class="btn" id="btn-exportar-pend" title="Exporta las filas visibles según los filtros aplicados">⬇ Exportar vista</button>
+      <button class="btn mini" id="btn-cols-pend" title="Elegir qué columnas mostrar y exportar">⚙ Columnas</button>
+      <button class="btn" id="btn-exportar-pend" title="Exporta las filas y columnas visibles según los filtros aplicados">⬇ Exportar vista</button>
     </div>
     <div class="envoltura-tabla" id="lista-pendientes" style="max-height:calc(100vh - 320px)">
       <table class="equipos">
@@ -940,7 +941,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-16.33';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-16.34';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -2031,6 +2032,24 @@ function abrirSelectorColumnas(ancla){
     prefs.colsEquipos=sel; guardarPrefs();
     grabEvento({e:'columnas', visibles:sel.length});
     renderTabla(); cerrarPopover();
+  });
+}
+function abrirSelectorColumnasPend(ancla){
+  const pop=$('#filtro-pop'); popCol=null; popColPlan=null; popColPend=null; popColCorr=null; popColGantt=null;
+  const visibles=new Set(colsPendVisibles().map(c=>c.k));
+  pop.innerHTML=`<div class="fp-cab">Columnas de Pendientes (ver y exportar)</div>
+    <div class="fp-lista" style="max-height:320px">${PEND_COLS.map(c=>`<label><input type="checkbox" class="fp-colpend" value="${c.k}" ${visibles.has(c.k)?'checked':''}> <span>${esc(c.l)}</span></label>`).join('')}</div>
+    <div class="fp-pie"><button class="defecto">Restablecer</button><button class="ok">Aplicar</button></div>`;
+  const rect=ancla.getBoundingClientRect();
+  pop.style.display='block';
+  let x=rect.left+window.scrollX;
+  if(x+270 > window.scrollX+document.documentElement.clientWidth-10) x=window.scrollX+document.documentElement.clientWidth-280;
+  pop.style.left=x+'px'; pop.style.top=(rect.bottom+window.scrollY+6)+'px';
+  pop.querySelector('.defecto').addEventListener('click',()=>{ delete prefs.colsPend; guardarPrefs(); renderPendientes(); cerrarPopover(); toast('Columnas de Pendientes restablecidas.'); });
+  pop.querySelector('.ok').addEventListener('click',()=>{
+    const sel=[...pop.querySelectorAll('.fp-colpend')].filter(c=>c.checked).map(c=>c.value);
+    if(!sel.length){ toast('⚠️ Selecciona al menos una columna.'); return; }
+    prefs.colsPend=sel; guardarPrefs(); renderPendientes(); cerrarPopover();
   });
 }
 document.addEventListener('click', ev=>{
@@ -3328,12 +3347,22 @@ function tablaPendientes(lista){
     ${filas}</table></div>`;
 }
 const PEND_COLS=[
-  {k:'equipo',l:'Equipo'},{k:'serie',l:'Serie'},{k:'inventario',l:'N° Inventario'},{k:'servicio',l:'Servicio'},{k:'tipo',l:'Tipo'},
+  {k:'equipo',l:'Equipo'},{k:'serie',l:'Serie'},{k:'inventario',l:'N° Inventario'},{k:'servicio',l:'Servicio'},
+  {k:'eqId',l:'ID equipo'},{k:'carpeta',l:'N° Carpeta'},{k:'unidad',l:'Unidad'},{k:'ubicacion',l:'Ubicación'},
+  {k:'procedencia',l:'Procedencia'},{k:'marca',l:'Marca'},{k:'modelo',l:'Modelo'},
+  {k:'anio',l:'Año Instalación'},{k:'vidaUtil',l:'Vida Útil Residual'},{k:'clasificacion',l:'Clasificación'},{k:'enu',l:'ENU / Baja'},
+  {k:'tipo',l:'Tipo'},
   {k:'urgencia',l:'Urgencia'},{k:'estadoG',l:'Estado'},{k:'repro',l:'Reporte reprog.'},
   {k:'compromiso',l:'Compromiso'},{k:'atraso',l:'Días atraso'},{k:'tareas',l:'Tareas'},
   {k:'respAdmin',l:'Resp. Adm'},{k:'respEjec',l:'Resp. Eje'},
   {k:'esperaDe',l:'En espera de'},{k:'ultGestion',l:'Última gestión'},{k:'completado',l:'Completado'}
 ];
+/* columnas visibles por defecto (las del equipo extra quedan disponibles en el selector ⚙ Columnas) */
+const PEND_COLS_DEFECTO=['equipo','serie','inventario','servicio','tipo','urgencia','estadoG','repro','compromiso','atraso','tareas','respAdmin','respEjec','esperaDe','ultGestion','completado'];
+function colsPendVisibles(){
+  const sel=(prefs.colsPend&&prefs.colsPend.length)?new Set(prefs.colsPend):new Set(PEND_COLS_DEFECTO);
+  return PEND_COLS.filter(c=>sel.has(c.k));
+}
 const URG_TXT={atrasados:'Atrasado', hoy:'Hoy', semana:'Esta semana', proximos:'Próximo', espera:'En espera', completados:'Completado'};
 const URG_RANGO={'Atrasado':0,'Hoy':1,'Esta semana':2,'Próximo':3,'En espera':4,'Completado':5};
 let filtrosPend={}, ordenPend={k:null,dir:1}, busquedaPend='', popColPend=null;
@@ -3356,7 +3385,7 @@ function filaExpandida(p){
   }).join('')}</div>`:'<small style="color:var(--gris-4)">Sin tareas.</small>';
   const gestiones=(p.gestiones||[]).slice().reverse().map(g=>`<div class="log-item"><time>${esc(g.fecha)}</time>${esc(g.texto)}</div>`).join('')||'<small style="color:var(--gris-4)">Sin gestiones registradas.</small>';
   const input = p.estado==='Completado' ? '' : `<div class="pc-gestion-in" style="margin-top:8px"><input type="text" data-pc-gestion="${p.id}" placeholder="➕ Registrar gestión… (Enter)"></div>`;
-  return `<tr class="pend-exp"><td colspan="${PEND_COLS.length+1}">
+  return `<tr class="pend-exp"><td colspan="${colsPendVisibles().length+1}">
     <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:18px;padding:8px 6px">
       <div><h3 style="margin:0 0 8px">Tareas</h3>${tareasHtml}
         ${p.descripcion?`<div style="margin-top:10px;font-size:.85rem"><strong>Descripción:</strong> ${esc(p.descripcion)}</div>`:''}
@@ -3378,6 +3407,9 @@ function filasPendBase(){
     const ri = esReprogramacion(p)?datosReprogDe(p):null;
     return { id:p.id, key:p.equipoKey, p,
       equipo:e?e.equipo:p.equipoKey, serie:e?e.serie:'', inventario:e?e.inventario:'', servicio:e?e.servicio:'', tipo:p.tipo||'',
+      eqId:e?(e.id||''):'', carpeta:e?(e.carpeta||''):'', unidad:e?(e.unidad||''):'', ubicacion:e?(e.ubicacion||''):'', procedencia:e?(e.procedencia||''):'',
+      marca:e?(e.marca||''):'', modelo:e?(e.modelo||''):'', anio:e?(e.anio||''):'', vidaUtil:e?(e.vidaUtil||''):'',
+      clasificacion:e?(e.clasificacion||''):'', enu:e?(e.enu||''):'',
       urgencia:urg, estadoG:estadoGestionPendiente(p), repro:etapaReprogramacion(p),
       reproInfo: ri,
       compromiso:p.fechaCompromiso||'', atraso:venc?String(diasEntre(p.fechaCompromiso,hoy)):'',
@@ -3438,7 +3470,8 @@ function renderPendientes(){
     ${rGen?`<span class="chip rojo" data-repro-filtro="Por generar" style="cursor:pointer" title="Filtrar reportes por generar">📄 ${rGen} reporte${rGen!==1?'s':''} por generar</span>`:''}
     ${rImp?`<span class="chip ambar" data-repro-filtro="Por imprimir" style="cursor:pointer" title="Filtrar reportes por imprimir">🖨 ${rImp} por imprimir</span>`:''}
     ${rFir?`<span class="chip ambar" data-repro-filtro="firma" style="cursor:pointer" title="Filtrar reportes que esperan firma">✍ ${rFir} por firmar</span>`:''}`;
-  thead.innerHTML = PEND_COLS.map(c=>{
+  const COLSV=colsPendVisibles();
+  thead.innerHTML = COLSV.map(c=>{
     const filtrado=!!filtrosPend[c.k];
     const flecha=ordenPend.k===c.k?(ordenPend.dir===1?' ▲':' ▼'):'';
     return `<th><div class="th-int"><span class="tit">${esc(c.l)}${flecha}</span>
@@ -3447,9 +3480,9 @@ function renderPendientes(){
   const filas=filasPendVisibles();
   const tbody=$('#tbody-pend');
   if(!state.pendientes.length){
-    tbody.innerHTML=`<tr><td colspan="${PEND_COLS.length+1}"><div class="vacio">Sin pendientes. Se crean desde la ficha de cada equipo o automáticamente al registrar mantenciones con gestión pendiente.</div></td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="${COLSV.length+1}"><div class="vacio">Sin pendientes. Se crean desde la ficha de cada equipo o automáticamente al registrar mantenciones con gestión pendiente.</div></td></tr>`;
   } else if(!filas.length){
-    tbody.innerHTML=`<tr><td colspan="${PEND_COLS.length+1}"><div class="vacio">Ningún pendiente coincide con los filtros.</div></td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="${COLSV.length+1}"><div class="vacio">Ningún pendiente coincide con los filtros.</div></td></tr>`;
   } else {
     tbody.innerHTML = filas.map(f=>{
       const cls = f.estadoG==='Completado'?'completado':(f.esperaDe?'espera':(f.atraso?'vencido':''));
@@ -3462,7 +3495,7 @@ function renderPendientes(){
            ${f.esperaDe?`<button class="btn mini" data-pc-reanudar="${f.id}" title="Quitar la espera">▶</button>`:`<button class="btn mini" data-pc-espera="${f.id}" title="Marcar en espera de un tercero">✋</button>`}
            <button class="btn mini" data-pc-gestionp="${f.id}" title="Registrar gestión">➕</button>
            <button class="btn mini" data-pc-editar="${f.id}" title="Abrir el detalle">✎</button>`;
-      const celdas = PEND_COLS.map(c=>{
+      const celdas = COLSV.map(c=>{
         let v=f[c.k]||'';
         if(c.k==='equipo') return `<td style="max-width:200px"><a href="#" data-pc-eq="${esc(f.key)}" style="color:var(--azul-osc);font-weight:600">${esc(v)}</a></td>`;
         if(c.k==='urgencia') return `<td>${v==='Atrasado'?'<span class="chip rojo">Atrasado</span>':v==='Hoy'?'<span class="chip ambar">Hoy</span>':v==='En espera'?'<span class="chip ambar">✋ En espera</span>':v==='Completado'?'<span class="chip verde">Completado</span>':'<span class="chip gris">'+esc(v)+'</span>'}</td>`;
@@ -3531,13 +3564,15 @@ function exportarPendientesVista(){
   if(typeof XLSX==='undefined'){ toast('Librería XLSX no disponible.'); return; }
   const filas=filasPendVisibles();
   if(!filas.length){ toast('No hay filas para exportar.'); return; }
-  const aoa=[PEND_COLS.map(c=>c.l), ...filas.map(f=>PEND_COLS.map(c=>{
+  const COLSV=colsPendVisibles();
+  const aoa=[COLSV.map(c=>c.l), ...filas.map(f=>COLSV.map(c=>{
     let v=f[c.k]||'';
     if(c.k==='compromiso'||c.k==='completado') v=v?fmtFecha(v):'';
+    if(c.k==='reproInfo') v='';
     return String(v);
   }))];
   const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, hojaTexto(aoa, PEND_COLS.map(c=>({wch:Math.max(c.l.length+2,12)}))), 'Pendientes');
+  XLSX.utils.book_append_sheet(wb, hojaTexto(aoa, COLSV.map(c=>({wch:Math.max(c.l.length+2,12)}))), 'Pendientes');
   XLSX.writeFile(wb, 'Pendientes_GMP2026_'+hoyISO()+'.xlsx');
   toast('⬇ Exportados '+filas.length+' pendientes.');
 }
@@ -4224,6 +4259,7 @@ function conectarEventos(){
     const vals = f==='firma' ? ['Faltan 2 firmas','Falta firma del supervisor','Falta firma del jefe'] : [f];
     filtrosPend.repro = new Set(vals); ordenPend={k:null,dir:1}; renderPendientes();
   });
+  $('#btn-cols-pend').addEventListener('click',ev=>{ ev.stopPropagation(); abrirSelectorColumnasPend(ev.currentTarget); });
   $('#btn-exportar-pend').addEventListener('click',exportarPendientesVista);
   $('#thead-pend').addEventListener('click',ev=>{
     const b=ev.target.closest('.btn-filtro');
