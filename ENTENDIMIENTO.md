@@ -8,7 +8,7 @@
 > *Está escrito en primera persona, tal como lo expliqué, para poder leerlo y confirmar que se
 > entendió todo. Si algo no calza con la realidad, se corrige aquí primero.*
 
-_Última actualización: 2026-06-16 · App build 2026-06-16.37_
+_Última actualización: 2026-06-16 · App build 2026-06-16.38_
 
 ---
 
@@ -139,6 +139,11 @@ Operativo / Servicio Técnico), su **criticidad** y la **siguiente acción** rec
 asegurar la operatividad. Así, en una mirada, sé qué equipos necesitan atención y qué hacer con
 cada uno, sin tener que reconstruirlo a mano.
 
+En la **ficha de cada equipo** tengo además su **bitácora**: una fila por evento con su fecha y
+estado, en orden cronológico (órdenes de trabajo, reprogramaciones, mantenciones, envíos, retornos,
+cierres, pendientes). Es el relato de *qué le ha pasado y cuándo* — el complemento histórico del
+estado actual.
+
 ---
 
 ## 9. Principios que deben guiar la aplicación final
@@ -176,6 +181,7 @@ cada uno, sin tener que reconstruirlo a mano.
 | 2026‑06‑16 | **«← Volver»** regresa a la vista de origen | Si entré desde Pendientes, volver a Pendientes, no a Equipos |
 | 2026‑06‑16 | **Oficializar y cerrar** la reprogramación: la app indica **qué código y en qué columna del Excel** y, al recargar la carta, sugiere cerrar | Cerrar el ciclo: firmado → escribo el código en la carta → recargo (oficial) → cierro |
 | 2026‑06‑16 | El respaldo no guarda columnas derivadas (se recalculan) | Respaldos más livianos para traspasar/guardar |
+| 2026‑06‑16 | **Bitácora del equipo** en la ficha: una fila por evento con su fecha y estado (MP, reprogramaciones, OT, envíos, retornos, cierres, pendientes) en orden cronológico | Ver de un vistazo *qué ocurrió y cuándo* con cada equipo, sin reconstruirlo a mano |
 
 ---
 
