@@ -162,6 +162,11 @@ table.equipos tbody tr:hover td{background:var(--azul-claro)}
 .inicio-card.azul{border-left-color:var(--azul)} .inicio-card.azul .ic-n{color:var(--azul)}
 .inicio-card.verde{border-left-color:var(--verde)} .inicio-card.verde .ic-n{color:var(--verde)}
 .inicio-card.morado{border-left-color:var(--morado)} .inicio-card.morado .ic-n{color:var(--morado)}
+.bit-filtros{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-bottom:10px}
+.bit-chip{border:1px solid var(--gris-3);background:#fff;color:var(--tinta);border-radius:999px;padding:4px 12px;font-size:.82rem;cursor:pointer}
+.bit-chip:hover{border-color:var(--gris-4)}
+.bit-chip.sel{background:var(--azul);color:#fff;border-color:transparent;font-weight:600}
+.bit-busca{margin-left:auto;padding:6px 11px;border:1px solid var(--gris-3);border-radius:8px;font-size:.85rem;min-width:210px}
 .det-banner{display:flex;flex-wrap:wrap;align-items:center;gap:9px 18px;margin:12px 0 2px;padding:11px 14px;border:1px solid var(--gris-2);border-left:5px solid var(--gris-3);border-radius:9px;background:var(--gris-1)}
 .det-banner.rojo{border-left-color:var(--rojo);background:var(--rojo-bg)}
 .det-banner.ambar{border-left-color:var(--ambar);background:var(--ambar-bg)}
@@ -968,7 +973,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-16.42';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-16.43';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -2285,15 +2290,15 @@ async function restaurarRespaldo(file){
    PASO 7 — VISTA DE DETALLE DEL EQUIPO
    ===================================================================== */
 function equipoPorKey(k){ return state.equipos.find(e=>e.key===k); }
-function abrirDetalle(key){ const v=vistaActiva(); if(v && v!=='detalle') detalleOrigen=v; detalleKey=key; renderDetalle(key); mostrarVista('detalle'); }
+function abrirDetalle(key){ const v=vistaActiva(); if(v && v!=='detalle') detalleOrigen=v; bitFiltro='todo'; bitBusca=''; detalleKey=key; renderDetalle(key); mostrarVista('detalle'); }
 
 /* Bitácora cronológica del equipo: reúne todos los eventos CON FECHA (mantenciones de la app,
    reprogramaciones, órdenes de trabajo, hitos del expediente, envíos/retornos, cierres y
    pendientes), una entrada por evento, ordenadas por fecha. */
 function bitacoraEquipo(key){
   const ev=[];
-  /* cada entrada lleva una referencia a su origen para que la fila sea clickeable (ref:{t,id}) */
-  const add=(f,txt,label,clase,ref)=>{ if(f) ev.push({f, txt, label:label||'', clase:clase||'gris', ref:ref||null}); };
+  /* cada entrada lleva su categoría (para filtrar) y una referencia a su origen (fila clickeable) */
+  const add=(f,txt,label,clase,ref,cat)=>{ if(f) ev.push({f, txt, label:label||'', clase:clase||'gris', ref:ref||null, cat:cat||'otro'}); };
   /* 1) Mantenciones preventivas / reprogramaciones (registradas en la app) */
   state.manuales.filter(m=>m.equipoKey===key).forEach(m=>{
     if(/^C[1-8]$/.test(m.resultado||'')){
@@ -2305,21 +2310,21 @@ function bitacoraEquipo(key){
       else if(ofi){ label='Oficial'; clase='verde'; }
       else { label='Pendiente'; clase='ambar'; }   /* causal sin oficializar = reprogramación pendiente */
       /* la reprogramación lleva a su pendiente (donde se trabaja el reporte) si existe; si no, a la MP */
-      add(m.fecha, 'Reprogramación — causal '+m.resultado+(m.ejecutor?' · '+m.ejecutor:''), label, clase, pend?{t:'pend',id:pend.id}:{t:'mp',id:m.id});
+      add(m.fecha, 'Reprogramación — causal '+m.resultado+(m.ejecutor?' · '+m.ejecutor:''), label, clase, pend?{t:'pend',id:pend.id}:{t:'mp',id:m.id}, 'reprog');
     } else {
       const r=m.resultado||'';
       const txt = (r==='Si'||r==='Si-RA') ? 'Mantención preventiva realizada'
                 : r==='FS' ? 'Mantención preventiva — Fuera de Servicio'
                 : r ? 'Mantención preventiva — '+(RESULTADOS[r]||r) : 'Mantención preventiva';
-      add(m.fecha, txt+(m.estadoEquipo?' · equipo '+m.estadoEquipo:'')+(m.ejecutor?' · '+m.ejecutor:''), m.tipoRegistro||'Borrador', (m.tipoRegistro==='Oficial')?'verde':'ambar', {t:'mp',id:m.id});
+      add(m.fecha, txt+(m.estadoEquipo?' · equipo '+m.estadoEquipo:'')+(m.ejecutor?' · '+m.ejecutor:''), m.tipoRegistro||'Borrador', (m.tipoRegistro==='Oficial')?'verde':'ambar', {t:'mp',id:m.id}, 'mp');
     }
   });
   /* 2) Mantenimiento correctivo: apertura del evento, hitos del expediente y avances */
   state.correctivos.filter(c=>c.equipoKey===key).forEach(c=>{
     const cerr=estadoEventoDe(c)==='Cerrado', refOT={t:'ot',id:c.id};
-    add(c.fechaDocumento, tipoEventoDe(c)+(c.folioSigem?' — folio '+c.folioSigem:'')+(c.requerimiento?' · '+c.requerimiento:''), cerr?'Cerrado':'Abierto', cerr?'verde':'azul', refOT);
-    if(c.informeTecnicoFecha) add(c.informeTecnicoFecha, 'Informe técnico'+(c.informeTecnicoNum?' N° '+c.informeTecnicoNum:''), 'Expediente', 'gris', refOT);
-    if(c.ordenCompraFecha) add(c.ordenCompraFecha, 'Orden de compra emitida'+(c.ordenCompraNum?' N° '+c.ordenCompraNum:''), 'Expediente', 'gris', refOT);
+    add(c.fechaDocumento, tipoEventoDe(c)+(c.folioSigem?' — folio '+c.folioSigem:'')+(c.requerimiento?' · '+c.requerimiento:''), cerr?'Cerrado':'Abierto', cerr?'verde':'azul', refOT, 'ot');
+    if(c.informeTecnicoFecha) add(c.informeTecnicoFecha, 'Informe técnico'+(c.informeTecnicoNum?' N° '+c.informeTecnicoNum:''), 'Expediente', 'gris', refOT, 'ot');
+    if(c.ordenCompraFecha) add(c.ordenCompraFecha, 'Orden de compra emitida'+(c.ordenCompraNum?' N° '+c.ordenCompraNum:''), 'Expediente', 'gris', refOT, 'ot');
     (c.avances||[]).forEach(a=>{
       if(a.tipo==='Cierre del expediente') return;   /* lo cubre la fila de cierre, sin duplicar */
       let t=a.tipo||'Avance';
@@ -2327,21 +2332,49 @@ function bitacoraEquipo(key){
       else if(a.tipo==='Retorno de Servicio Técnico') t='Retorno de Servicio Técnico'+(a.folioRetorno?' · folio '+a.folioRetorno:'')+(a.empresa?' de '+a.empresa:'')+(a.estadoEquipoRetorno?' · equipo '+a.estadoEquipoRetorno:'');
       else if(a.tipo==='Visita / Ejecución realizada') t='Visita / ejecución'+(a.estadoEquipoVisita?' · equipo '+a.estadoEquipoVisita:'');
       else if(a.detalle) t=a.tipo+' · '+a.detalle;
-      add(a.fecha, t, 'Avance', 'gris', refOT);
+      add(a.fecha, t, 'Avance', 'gris', refOT, 'ot');
     });
     if(c.fechaCierre){
       const cav=(c.avances||[]).find(a=>a.tipo==='Cierre del expediente' && a.detalle);
       const det = c.estadoEquipoCierre ? ' · equipo '+c.estadoEquipoCierre : (cav&&cav.detalle?' · '+cav.detalle:'');
-      add(c.fechaCierre, 'Cierre del expediente'+det, 'Cerrado', 'verde', refOT);
+      add(c.fechaCierre, 'Cierre del expediente'+det, 'Cerrado', 'verde', refOT, 'ot');
     }
   });
   /* 3) Pendientes creados a mano (los de origenMP ya aparecen en su mantención) y su cierre */
   state.pendientes.filter(p=>p.equipoKey===key).forEach(p=>{
-    if(!p.origenMP) add(p.creado, 'Pendiente — '+(p.tipo||'gestión'), estadoGestionPendiente(p), p.estado==='Completado'?'verde':'ambar', {t:'pend',id:p.id});
-    if(p.estado==='Completado' && p.fechaCompletado) add(p.fechaCompletado, 'Pendiente completado — '+(p.tipo||''), 'Completado', 'verde', {t:'pend',id:p.id});
+    if(!p.origenMP) add(p.creado, 'Pendiente — '+(p.tipo||'gestión'), estadoGestionPendiente(p), p.estado==='Completado'?'verde':'ambar', {t:'pend',id:p.id}, 'pend');
+    if(p.estado==='Completado' && p.fechaCompletado) add(p.fechaCompletado, 'Pendiente completado — '+(p.tipo||''), 'Completado', 'verde', {t:'pend',id:p.id}, 'pend');
   });
   ev.sort((a,b)=>(a.f||'').localeCompare(b.f||''));
   return ev;
+}
+/* ---------- Bitácora filtrable (categoría + búsqueda) ---------- */
+let bitFiltro='todo', bitBusca='';
+const BIT_CATS=[['todo','Todo'],['mp','Preventivo'],['reprog','Reprogramación'],['ot','Correctivo'],['pend','Pendiente']];
+function pintarBitacora(key){
+  const cont=$('#det-bitacora'); if(!cont) return;
+  const bit=bitacoraEquipo(key);
+  const porCat={}; bit.forEach(x=>porCat[x.cat]=(porCat[x.cat]||0)+1);
+  const chips=BIT_CATS.map(([k,l])=>{
+    const n = k==='todo'?bit.length:(porCat[k]||0);
+    if(k!=='todo' && !n) return '';
+    return `<button class="bit-chip ${bitFiltro===k?'sel':''}" data-bit-cat="${k}">${esc(l)} (${n})</button>`;
+  }).filter(Boolean).join('');
+  cont.innerHTML = bit.length
+    ? `<div class="bit-filtros">${chips}<input type="text" id="bit-busca" class="bit-busca" placeholder="Buscar en la bitácora…" value="${esc(bitBusca)}"></div><div id="det-bit-tabla"></div>`
+    : '<div class="vacio">Sin eventos con fecha registrados para este equipo.</div>';
+  pintarBitTabla(key);
+}
+function pintarBitTabla(key){
+  const cont=$('#det-bit-tabla'); if(!cont) return;
+  let bit=bitacoraEquipo(key);
+  if(bitFiltro!=='todo') bit=bit.filter(x=>x.cat===bitFiltro);
+  if(bitBusca){ const b=sinAcentos(bitBusca).toLowerCase(); bit=bit.filter(x=>sinAcentos(x.txt+' '+x.label).toLowerCase().includes(b)); }
+  cont.innerHTML = bit.length
+    ? `<div style="overflow:auto"><table class="lista"><tr><th style="width:108px">Fecha</th><th>Qué ocurrió</th><th style="width:150px">Estado</th></tr>`
+      + bit.map(x=>`<tr ${x.ref?`class="click" data-bit="${x.ref.t}|${esc(x.ref.id)}" title="Abrir este evento"`:''}><td><strong>${fmtFecha(x.f)}</strong></td><td>${esc(x.txt)}</td><td><span class="chip ${x.clase}">${esc(x.label)}</span></td></tr>`).join('')
+      + `</table></div>`
+    : '<div class="vacio">Sin eventos que coincidan con el filtro.</div>';
 }
 
 function renderDetalle(key){
@@ -2430,13 +2463,8 @@ function renderDetalle(key){
     ? `<div style="overflow:auto"><table class="lista"><tr><th>Mes</th><th>Fecha ejecución</th><th>Programa</th><th>Resultado</th><th>Significado / Observaciones</th><th>Ejecutor</th><th>Registro</th><th>Origen</th><th></th></tr>${filasH.join('')}</table></div>`
     : '<div class="vacio">Sin mantenciones registradas para este equipo.</div>';
 
-  /* Bitácora cronológica unificada: una fila por evento con su fecha y estado */
-  const bit = bitacoraEquipo(key);
-  $('#det-bitacora').innerHTML = bit.length
-    ? `<div style="overflow:auto"><table class="lista"><tr><th style="width:108px">Fecha</th><th>Qué ocurrió</th><th style="width:150px">Estado</th></tr>`
-      + bit.map(x=>`<tr ${x.ref?`class="click" data-bit="${x.ref.t}|${esc(x.ref.id)}" title="Abrir este evento"`:''}><td><strong>${fmtFecha(x.f)}</strong></td><td>${esc(x.txt)}</td><td><span class="chip ${x.clase}">${esc(x.label)}</span></td></tr>`).join('')
-      + `</table></div>`
-    : '<div class="vacio">Sin eventos con fecha registrados para este equipo.</div>';
+  /* Bitácora cronológica unificada (filtrable) */
+  pintarBitacora(key);
 
   /* Pendientes del equipo */
   const pendEq = state.pendientes.filter(p=>p.equipoKey===key);
@@ -3141,16 +3169,6 @@ function renderExpedientesHTML(otsEq){
     const dias = x.cerrado
       ? `<span class="dias">${x.critico?'Detención':'Ciclo'}: ${x.dias} días</span>`
       : `<span class="dias ${abiertoCritico?'rojo':''}">${abiertoCritico?'🔴 Detenido hace':'⏱ Abierta hace'} ${x.dias} días</span>`;
-    let html='', prevFecha=x.nodos[0].fecha, prevDone=true;
-    x.nodos.forEach((n,i)=>{
-      if(i>0){
-        const ambos = prevDone && n.done && prevFecha && n.fecha;
-        html += `<div class="lt-seg ${ambos?'':'pend'}"><i></i>${ambos?`<span>+${diasEntre(prevFecha,n.fecha)} días</span>`:''}</div>`;
-      }
-      html += `<div class="lt-nodo ${n.done?'':'pend'}"><div class="lt-punto"></div><strong>${esc(n.et)}</strong><small>${n.done?fmtFecha(n.fecha):'pendiente'}</small>${n.sub?`<small>${esc(n.sub)}</small>`:''}</div>`;
-      if(n.done && n.fecha){ prevFecha=n.fecha; }
-      prevDone=n.done;
-    });
     const avs=(x.ot.avances||[]).slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
     const bitacora = avs.length ? `<div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">${avs.map(a=>{
       const extra=[a.informeNum?'Informe N° '+a.informeNum:'', a.ocNum?'OC '+a.ocNum:'', a.numeroEnvio?'Envío N° '+a.numeroEnvio+(a.empresa?' a '+a.empresa:''):'', a.folioRetorno?'Retorno folio '+a.folioRetorno+(a.empresa?' de '+a.empresa:'')+(a.enviadoPor?' · enviado por '+a.enviadoPor:''):'', a.estadoEquipoRetorno?'Equipo '+a.estadoEquipoRetorno+' al retorno':'', a.estadoEquipoVisita?'Equipo '+a.estadoEquipoVisita+' tras la visita':'', a.estadoEquipoCierre?'Equipo '+a.estadoEquipoCierre+' al cierre':''].filter(Boolean).join(' · ');
@@ -3166,7 +3184,7 @@ function renderExpedientesHTML(otsEq){
        <button class="btn mini" data-avance-ot="${esc(x.ot.id)}" title="Registrar un avance con fecha distinta o con detalle">➕ con detalle…</button>`;
     return `<div class="expediente ${abiertoCritico?'critico':''}">
       <div class="exp-cab"><strong>Folio ${esc(x.folio.startsWith('·sin-folio·')?'(sin folio)':x.folio)}</strong>${estadoChip}${etapa}${btnAvance}${dias}</div>
-      <div class="linea-tiempo">${html}</div>${bitacora}
+      ${bitacora}
     </div>`;
   }).join('');
 }
@@ -3851,13 +3869,13 @@ function renderCorrectivos(){
     const flecha=ordenCorr.k===c.k?(ordenCorr.dir===1?' ▲':' ▼'):'';
     return `<th><div class="th-int"><span class="tit">${esc(c.l)}${flecha}</span>
       <button class="btn-filtro ${filtrado?'activo':''}" data-corr-col="${c.k}" title="Filtrar / ordenar">${filtrado?'⏷✓':'⏷'}</button></div></th>`;
-  }).join('');
+  }).join('')+'<th><div class="th-int"><span class="tit">Registro rápido</span></div></th>';
   const filas=filasCorrVisibles();
   const tbody=$('#tbody-corr');
   if(!exps.length){
-    tbody.innerHTML=`<tr><td colspan="${CORR_COLS.length}"><div class="vacio">Sin expedientes correctivos. Se crean desde la ficha del equipo con «🔩 Mantenimiento Correctivo».</div></td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="${CORR_COLS.length+1}"><div class="vacio">Sin expedientes correctivos. Se crean desde la ficha del equipo con «🔩 Mantenimiento Correctivo».</div></td></tr>`;
   } else if(!filas.length){
-    tbody.innerHTML=`<tr><td colspan="${CORR_COLS.length}"><div class="vacio">Ningún expediente coincide con los filtros.</div></td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="${CORR_COLS.length+1}"><div class="vacio">Ningún expediente coincide con los filtros.</div></td></tr>`;
   } else {
     tbody.innerHTML=filas.map(f=>`<tr data-key="${esc(f.key)}" style="cursor:pointer">`+CORR_COLS.map(c=>{
       let v=f[c.k]||'';
@@ -3866,7 +3884,7 @@ function renderCorrectivos(){
       if(c.k==='fechaDoc') return `<td>${v?fmtFecha(v):'—'}</td>`;
       if(c.k==='diasCiclo') return `<td><strong style="${(!f._cerrado&&f._diasNum>30)?'color:var(--rojo)':''}">${esc(v)}</strong></td>`;
       return `<td title="${esc(v)}">${esc(v)||'—'}</td>`;
-    }).join('')+'</tr>').join('');
+    }).join('')+`<td style="white-space:nowrap">${f._cerrado?'<span style="color:var(--gris-4)">—</span>':`<button class="btn mini primario" data-av-rapido="${esc(f.idExp)}" title="Registrar un envío, retorno, visita u otro avance de este expediente sin entrar a la ficha">➕ Avance</button>`}</td>`+'</tr>').join('');
   }
   $('#contador-corr').textContent=`Mostrando ${filas.length} de ${exps.length} expedientes`;
   $('#btn-limpiar-corr').style.display=(Object.keys(filtrosCorr).length||busquedaCorr||ordenCorr.k)?'':'none';
@@ -3978,7 +3996,7 @@ function selectorDe(el){
 }
 function vistaActiva(){ const v=$$('.vista').find(x=>x.classList.contains('activa')); return v?v.id.replace('vista-',''):''; }
 function modalActivo(){ const m=$$('.modal-fondo').find(x=>x.classList.contains('abierto')); return m?m.id:''; }
-function grabEvento(ev){ if(grab){ const o=Object.assign({t:Date.now()-grab.inicio}, ev); const md=modalActivo(); if(md && !o.modal) o.modal=md; grab.eventos.push(o); } }
+function grabEvento(ev){ if(grab){ const o=Object.assign({t:Date.now()-grab.inicio}, ev); const md=modalActivo(); if(md && !o.modal) o.modal=md; grab.eventos.push(o); return o; } return null; }
 const grabHandlers={
   click(e){
     const el=e.target.closest('button,a,tr,th,label,input,select')||e.target;
@@ -3987,8 +4005,16 @@ const grabHandlers={
     const repetido = grab._ultClick && grab._ultClick.sel===sel && (ahora-grab._ultClick.t)<800;
     grab._ultClick={sel, t:ahora};
     const ev={e:'click', vista:vistaActiva(), sel, txt:(el.textContent||el.value||'').trim().slice(0,60)};
+    /* QUÉ se tocó: la entidad (equipo/pendiente/evento) más cercana, no solo el selector */
+    const ent=e.target.closest('[data-key],[data-pendiente],[data-bit],[data-oper-eq],[data-pc-eq],[data-pend-fila],[data-av-rapido],[data-row-mp],[data-row-ot]');
+    if(ent){ const da=ent.dataset; ev.entidad=(da.key||da.pendiente||da.bit||da.operEq||da.pcEq||da.pendFila||da.avRapido||da.rowMp||da.rowOt||'').slice(0,60); }
     if(repetido) ev.repetido=true;
-    grabEvento(ev);
+    const rec=grabEvento(ev);
+    /* clic muerto: en un elemento pasivo (fila/celda/texto) que no produjo navegación, modal ni mensaje */
+    if(rec && ['TR','TD','TH','DIV','SPAN','P','H1','H2','H3','SMALL','STRONG','SECTION','TABLE','TBODY'].includes(el.tagName)){
+      const efAntes=grab._ultEfectoT||0;
+      setTimeout(()=>{ if(grab && (grab._ultEfectoT||0)<=efAntes) rec.muerto=true; }, 450);
+    }
   },
   input(e){
     const el=e.target, sel=selectorDe(el);
@@ -4035,7 +4061,7 @@ function iniciarGrabacion(){
   window.addEventListener('resize', grabResize);
   /* envolver funciones clave para registrar navegación, formularios y retroalimentación con precisión */
   grab.origs.mostrarVista=mostrarVista;
-  mostrarVista=function(id){ grabEvento({e:'vista', id}); return grab.origs.mostrarVista(id); };
+  mostrarVista=function(id){ grab._ultEfectoT=Date.now(); grabEvento({e:'vista', id}); return grab.origs.mostrarVista(id); };
   grab.origs.abrirDetalle=abrirDetalle;
   abrirDetalle=function(k){ const e=equipoPorKey&&equipoPorKey(k); grabEvento({e:'detalle', equipo:String(k).slice(0,60), nombre:e?(e.equipo||''):''}); return grab.origs.abrirDetalle(k); };
   grab.origs.toast=toast;
@@ -4044,11 +4070,12 @@ function iniciarGrabacion(){
     const ev={e:'toast', msg:s.slice(0,160)};
     if(s.indexOf('⚠')>=0){ ev.validacion=true; }        /* el usuario chocó con una validación */
     else if(s.indexOf('✅')>=0||s.indexOf('✔')>=0){ ev.exito=true; }
-    grabEvento(ev);
+    grab._ultEfectoT=Date.now(); grabEvento(ev);
     return grab.origs.toast(m);
   };
   grab.origs.cerrarModal=cerrarModal;
   cerrarModal=function(id){
+    grab._ultEfectoT=Date.now();
     if($('#'+id).classList.contains('abierto')){
       const idx=grab.modalStack.map(x=>x.id).lastIndexOf(id);
       let dur=null, guardado=false;
@@ -4061,7 +4088,7 @@ function iniciarGrabacion(){
   /* apertura de modales: envolver las funciones que los abren */
   Object.entries(GRAB_MODALES).forEach(([fn,id])=>{
     grab.origs[fn]=window[fn];
-    window[fn]=function(){ grab.modalStack.push({id, tAbs:Date.now()}); grabEvento({e:'modal', id, accion:'abre'}); return grab.origs[fn].apply(null, arguments); };
+    window[fn]=function(){ grab._ultEfectoT=Date.now(); grab.modalStack.push({id, tAbs:Date.now()}); grabEvento({e:'modal', id, accion:'abre'}); return grab.origs[fn].apply(null, arguments); };
   });
   grab.timer=setInterval(()=>{
     const s=Math.floor((Date.now()-grab.inicio)/1000);
@@ -4097,13 +4124,15 @@ function detenerGrabacion(){
   const vistaTop=Object.entries(tiempoVista).sort((a,b)=>b[1]-a[1])[0];
   const cierres=ev.filter(x=>x.e==='modal'&&x.accion==='cierra');
   const datos={
-    tipo:'grabacion-gmp2026', version:3, build:APP_BUILD,
+    tipo:'grabacion-gmp2026', version:4, build:APP_BUILD,
     inicio:grab.inicioISO, fin:new Date().toISOString(),
     duracionSeg:durTotal, activoSeg:Math.max(0, durTotal-Math.round(ausente/1000)),
     resumen:{
       eventos:ev.length,
       clics:ev.filter(x=>x.e==='click').length,
       rageClicks:ev.filter(x=>x.e==='click'&&x.repetido).length,
+      clicsMuertos:ev.filter(x=>x.e==='click'&&x.muerto).length,
+      clicsMuertosDetalle:ev.filter(x=>x.e==='click'&&x.muerto).map(x=>({vista:x.vista, sel:x.sel, txt:x.txt, entidad:x.entidad})).slice(0,40),
       escritura:ev.filter(x=>x.e==='escribe').length,
       reescrituras:ev.filter(x=>x.e==='escribe'&&x.reescrito).length,
       cambios:ev.filter(x=>x.e==='cambia').length,
@@ -4278,6 +4307,8 @@ function conectarEventos(){
     if(b){ ev.stopPropagation(); (popColCorr===b.dataset.corrCol)?cerrarPopover():abrirPopoverCorr(b.dataset.corrCol,b); }
   });
   $('#tbody-corr').addEventListener('click',ev=>{
+    const av=ev.target.closest('[data-av-rapido]');
+    if(av){ ev.stopPropagation(); abrirModalAvance(av.dataset.avRapido); return; }
     const tr=ev.target.closest('tr[data-key]');
     if(tr) abrirDetalle(tr.dataset.key);
   });
@@ -4286,12 +4317,15 @@ function conectarEventos(){
   $('#btn-volver-detalle').addEventListener('click',()=>mostrarVista(detalleOrigen||'equipos'));
   /* Bitácora: cada fila lleva a su evento de origen (reprogramación/pendiente, MP o expediente) */
   $('#det-bitacora').addEventListener('click',ev=>{
+    const ch=ev.target.closest('[data-bit-cat]');
+    if(ch){ bitFiltro=ch.dataset.bitCat; pintarBitacora(detalleKey); return; }
     const tr=ev.target.closest('tr[data-bit]'); if(!tr) return;
     const [t,id]=tr.dataset.bit.split('|');
     if(t==='mp'){ const m=state.manuales.find(x=>x.id===id); if(m) abrirModalMP(m.equipoKey,m); }
     else if(t==='pend'){ const p=state.pendientes.find(x=>x.id===id); if(p) abrirModalPendiente(p.equipoKey,p,null); }
     else if(t==='ot'){ const c=state.correctivos.find(x=>x.id===id); if(c) abrirModalOT(c.equipoKey,c); }
   });
+  $('#det-bitacora').addEventListener('input',ev=>{ if(ev.target.id==='bit-busca'){ bitBusca=ev.target.value; pintarBitTabla(detalleKey); } });
   $('#btn-abrir-mp').addEventListener('click',()=>abrirModalMP(detalleKey,null));
   $('#btn-abrir-pendiente').addEventListener('click',()=>abrirModalPendiente(detalleKey,null,null));
   $('#btn-abrir-ot').addEventListener('click',()=>abrirModalOT(detalleKey,null));

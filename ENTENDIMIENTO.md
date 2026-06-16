@@ -8,7 +8,7 @@
 > *Está escrito en primera persona, tal como lo expliqué, para poder leerlo y confirmar que se
 > entendió todo. Si algo no calza con la realidad, se corrige aquí primero.*
 
-_Última actualización: 2026-06-16 · App build 2026-06-16.42_
+_Última actualización: 2026-06-16 · App build 2026-06-16.43_
 
 ---
 
@@ -187,6 +187,10 @@ estado actual.
 | 2026‑06‑16 | **Tablero de Inicio «¿qué hago hoy?»**: la app abre con el resumen accionable del día (equipos detenidos, OT por avanzar, reprogramaciones por etapa, MP del mes, pendientes vencidos) y los equipos más críticos; cada tarjeta lleva a su vista | Empezar el día sabiendo de inmediato qué tengo que hacer, sin armarlo a mano |
 | 2026‑06‑16 | **Bitácora clickeable**: cada fila de la bitácora del equipo abre su evento de origen (la reprogramación/pendiente, la MP o el expediente) | Cuando veo un evento en la bitácora quiero ir directo a trabajarlo |
 | 2026‑06‑16 | **Repaso de clickeabilidad**: filas del Historial → editar la mantención; filas del detalle de Correctivo → editar el evento (antes solo el botón ✎) | Que todo lo que parece clickeable lo sea, y poder ir directo a editar desde la fila |
+| 2026‑06‑16 | Se **elimina la línea de tiempo** de los expedientes en la ficha | No me servía de mucho; la bitácora ya cuenta la historia |
+| 2026‑06‑16 | **Bitácora filtrable**: chips por categoría (Preventivo/Reprogramación/Correctivo/Pendiente) y búsqueda | Encontrar rápido lo que busco dentro de la historia del equipo |
+| 2026‑06‑16 | **Registro rápido de avances correctivos** (➕ Avance) desde la vista Correctivos, sin entrar a la ficha | Reviso carpetas y necesito registrar envíos/recepciones rápido; la vía actual era lenta |
+| 2026‑06‑16 | **Grabación más inteligente**: captura la entidad de cada clic y detecta **clics muertos** | Que la grabación me sirva para que infieras lo que busco con cada clic |
 
 ---
 
