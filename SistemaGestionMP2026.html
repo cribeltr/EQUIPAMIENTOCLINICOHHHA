@@ -919,7 +919,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-16.28';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-16.29';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -1012,6 +1012,8 @@ function tareasProtocolo(tipo){
     ? [mk('Protocolo de mantenimiento Interno'), mk('Protocolo de mantenimiento Externo')]
     : [mk('Protocolo de mantenimiento Interno')];
 }
+/* tipos de pendiente que arman la lista de protocolo al seleccionarlos */
+const TIPO_PEND_PROTOCOLO = {'Protocolo Interno de Mantenimiento':'Interno','Protocolo Externo de Mantenimiento':'Externo'};
 
 /* ---------- Estado de la aplicación ---------- */
 let state = {
@@ -2318,6 +2320,9 @@ function abrirModalPendiente(equipoKey, pendiente, prellenar){
   $('#pe-equipo-nombre').textContent = e ? `${e.equipo} · Serie ${e.serie||'—'} · Inv. ${e.inventario||'—'}` : equipoKey;
   $('#pe-fecha').value = pendiente?pendiente.fechaCompromiso:hoyISO();
   $('#pe-tipo').value = pendiente?pendiente.tipo:(prellenar&&prellenar.tipo)||TIPOS_PENDIENTE[0];
+  /* si el tipo es de protocolo, asegurar su lista de tareas (Sí/No/Imprimir/Gestión) */
+  const tmAbrir=TIPO_PEND_PROTOCOLO[$('#pe-tipo').value];
+  if(tmAbrir) asegurarProtocoloEnTareas(tmAbrir);
   $('#pe-descripcion').value = pendiente?pendiente.descripcion:(prellenar&&prellenar.descripcion)||'';
   $('#pe-resp-adm').value = pendiente?pendiente.respAdmin:RESP_ADM_DEFECTO;
   $('#pe-resp-eje').value = pendiente?pendiente.respEjec:(prefs.ultimoRespEje||'');
@@ -2365,7 +2370,22 @@ function agregarGestion(){
   if(!t) return;
   peGestiones.push({fecha:new Date().toLocaleString('es-CL'), texto:t}); inp.value=''; renderPeLog();
 }
+/* agrega a la lista las tareas de protocolo del tipo (interno/externo) que aún no estén presentes */
+function asegurarProtocoloEnTareas(tipoMant){
+  const existentes=new Set(peTareas.map(t=>t.texto));
+  let n=0;
+  tareasProtocolo(tipoMant).forEach(t=>{ if(!existentes.has(t.texto)){ peTareas.push(t); n++; } });
+  return n;
+}
+/* si quedó texto escrito en los campos «nueva tarea» / «nueva gestión», incorporarlo antes de guardar */
+function volcarEntradasPendiente(){
+  const tt=$('#pe-tarea-nueva').value.trim();
+  if(tt){ peTareas.push({texto:tt, hecha:false}); $('#pe-tarea-nueva').value=''; }
+  const tg=$('#pe-gestion-nueva').value.trim();
+  if(tg){ peGestiones.push({fecha:new Date().toLocaleString('es-CL'), texto:tg}); $('#pe-gestion-nueva').value=''; }
+}
 function guardarPendiente(){
+  volcarEntradasPendiente();
   const equipoKey=$('#modal-pend').dataset.equipo;
   const fecha=$('#pe-fecha').value, tipo=$('#pe-tipo').value,
         adm=$('#pe-resp-adm').value, eje=$('#pe-resp-eje').value;
@@ -3927,6 +3947,13 @@ function conectarEventos(){
 
   /* Modal Pendiente */
   $$('#modal-pend .atajos button').forEach(b=>b.addEventListener('click',()=>{ $('#pe-fecha').value=sumarDias(hoyISO(),+b.dataset.dias); }));
+  /* al elegir un tipo de protocolo se arma la lista de tareas (Sí/No/Imprimir/Gestión) */
+  $('#pe-tipo').addEventListener('change',ev=>{
+    const tm=TIPO_PEND_PROTOCOLO[ev.target.value];
+    if(!tm) return;
+    const n=asegurarProtocoloEnTareas(tm);
+    if(n){ renderPeTareas(); toast('➕ Lista de protocolo '+tm.toLowerCase()+' agregada ('+n+' tarea'+(n>1?'s':'')+').'); }
+  });
   $('#pe-tarea-add').addEventListener('click',agregarTarea);
   $('#pe-tarea-nueva').addEventListener('keydown',ev=>{ if(ev.key==='Enter'){ev.preventDefault();agregarTarea();} });
   $('#pe-gestion-add').addEventListener('click',agregarGestion);
