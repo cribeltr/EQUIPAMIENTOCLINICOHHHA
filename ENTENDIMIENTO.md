@@ -8,7 +8,7 @@
 > *Está escrito en primera persona, tal como lo expliqué, para poder leerlo y confirmar que se
 > entendió todo. Si algo no calza con la realidad, se corrige aquí primero.*
 
-_Última actualización: 2026-06-16 · App build 2026-06-16.48_
+_Última actualización: 2026-06-16 · App build 2026-06-16.49_
 
 ---
 
@@ -199,9 +199,10 @@ el puente entre la app y el papel que vive en la carpeta de cada equipo.
    y la app debe acompañar ese ciclo, no entorpecerlo.
 5. **Lo que hago a diario debe ser rápido**: buscar, filtrar por servicio/mes, trabajar por lote,
    ver/exportar solo lo que necesito.
-6. **Mi trabajo no se pierde en silencio.** La app cuida primero los datos irrecuperables (lo que
-   registro), avisa de forma visible si no puede guardar y tolera respaldos antiguos o parciales sin
-   caerse. Ante la duda, siempre puedo descargar un respaldo.
+6. **Mi trabajo no se pierde en silencio.** La app guarda en **IndexedDB** (cuota amplia, fiable
+   también al abrir el archivo localmente) con localStorage como respaldo; cuida primero los datos
+   irrecuperables, avisa de forma visible solo si **ningún** almacén pudo guardar, y tolera respaldos
+   antiguos o parciales sin caerse. Ante la duda, siempre puedo descargar un respaldo.
 
 ---
 
@@ -242,6 +243,9 @@ el puente entre la app y el papel que vive en la carpeta de cada equipo.
 | 2026‑06‑16 | **«Visita diagnóstica» como tipo de evento correctivo**: aparece en el desplegable del modal de Correctivo, **sin pedir tipo de compra**, con folio opcional que se autocompleta con el del expediente abierto del equipo | Quería anotar una visita diagnóstica y solo tenía OT/Reporte; el formulario me empujaba a una compra que no corresponde |
 | 2026‑06‑16 | **Aclaración del concepto borrador/oficial** (secciones 2 y 5): el rojo de la carta dice «no es oficial»; el borrador de la app dice además **«y esto es lo que falta»** | Dejar registrado el porqué del borrador con detalle, que es el corazón del sistema |
 | 2026‑06‑16 | **Datos de servicios externos en correctivo y MP**: envío con **responsable**; **Reporte de Servicio** = reporte del ingeniero externo (fecha, ingeniero, empresa, N° de reporte, reparación/diagnóstico); retorno con **N° de guía de despacho** y «¿viene el reporte?» (si no, pendiente automático); **MP externa** con ingeniero externo + empresa; **lista reutilizable de ingenieros** | Registrar tal como ocurre: envíos, reparaciones/diagnósticos externos y retornos con sus datos reales, sin que el formulario me empuje a una compra |
+| 2026‑06‑16 | **Almacenamiento en IndexedDB** (principal) + localStorage (respaldo): el guardado deja de fallar cuando el navegador llena el localStorage de `file://`; migra solo lo que ya había. El aviso crítico solo aparece si fallan **ambos** | En uso real el navegador dejó de guardar mis cambios (almacenamiento lleno); ahora el trabajo se guarda con cuota amplia y no se pierde |
+| 2026‑06‑16 | **Ingeniero externo como texto libre con autocompletado** (en correctivo y MP) | Tenía que elegir de una lista vacía; ahora escribo el nombre y queda memorizado para la próxima |
+| 2026‑06‑16 | **Retorno sin reporte abre el pendiente** para completarlo de inmediato | Evita que arme a mano un pendiente duplicado para gestionar el reporte que faltó |
 
 ---
 

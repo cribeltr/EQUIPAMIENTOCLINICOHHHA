@@ -31,6 +31,7 @@ el resto fue uso general de exploración.
 | 2026-06-16 15:05 | Grabacion_GMP2026_20260616_1109.json | 2026-06-16.34 | 227 | 119 | pendientes | 5 | 0 | 0 | Carta Gantt: filtró abril por causales (reprogramadas) y por servicio. Reveló la necesidad de buscar envíos y de agrupar por servicio. |
 | 2026-06-16 15:21 | Grabacion_GMP2026_20260616_1123.json | 2026-06-16.35 | 112 | 68 | plan | 0 | 0 | 0 | Gantt: filtró abril reprogramadas y exportó (10 equipos). Confirmó que el Gantt mezcla bien planilla (X) + app (C6). |
 | 2026-06-16 17:05 | Grabacion_GMP2026_20260616_1308.json | 2026-06-16.38 | 197 | 53 | pendientes | 3 | 0 | 0 | Revisó la bitácora del equipo y trabajó un protocolo (Gestión + subtarea). Reportó el checklist por defecto al crear pendiente → se quitó. |
+| 2026-06-16 17:23 | Grabacion_GMP2026_20260616_1723.json | 2026-06-16.48 | 789 | 66 | detalle | 0 | 0 | 3 | Usó los servicios externos nuevos (envío con responsable, retorno «sin reporte» → pendiente auto, MP externa). Reveló: **almacenamiento lleno** (apareció el banner) → migración a **IndexedDB**; **lista de ingenieros vacía** → **texto libre con autocompletado**; armó un **pendiente de retorno duplicado a mano** → ahora se **autoabre**. Una fecha mal tecleada (2025) disparó el aviso de orden. |
 
 ---
 

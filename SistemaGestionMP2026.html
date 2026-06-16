@@ -357,6 +357,9 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
 </head>
 <body>
 
+<!-- Autocompletado de ingenieros externos (compartido por correctivo y MP externa) -->
+<datalist id="lista-ingenieros"></datalist>
+
 <!-- Aviso crítico: el almacenamiento del navegador no pudo guardar el trabajo del usuario -->
 <div id="aviso-guardado" role="alert">
   <span>⚠️ <strong>Tus cambios no se están guardando</strong> — el almacenamiento del navegador está lleno. Descarga un respaldo ahora para no perder tu trabajo.</span>
@@ -756,7 +759,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
       <!-- MP externa: datos del ingeniero externo para el protocolo de mantenimiento externo -->
       <div class="sub-form" id="mp-ext-campos" style="display:none">
         <div class="f-2col">
-          <div class="f-grupo"><label class="et">Ingeniero externo</label><select id="mp-ing-ext"></select></div>
+          <div class="f-grupo"><label class="et">Ingeniero externo</label><input type="text" id="mp-ing-ext" list="lista-ingenieros" placeholder="Nombre del ingeniero externo" autocomplete="off"></div>
           <div class="f-grupo"><label class="et">Empresa</label><select id="mp-ext-empresa"></select></div>
         </div>
       </div>
@@ -905,7 +908,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
           </div>
         </div>
         <div class="f-2col">
-          <div class="f-grupo"><label class="et">Ingeniero externo</label><select id="ot-ing-ext"></select></div>
+          <div class="f-grupo"><label class="et">Ingeniero externo</label><input type="text" id="ot-ing-ext" list="lista-ingenieros" placeholder="Nombre del ingeniero externo" autocomplete="off"></div>
           <div class="f-grupo"><label class="et">Empresa</label><select id="ot-serv-empresa"></select></div>
         </div>
         <div class="f-grupo"><label class="et">N° de reporte de servicio</label><input type="text" id="ot-reporte-num" placeholder="N° del reporte de servicio del externo"></div>
@@ -1044,7 +1047,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-16.48';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-16.49';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -1275,41 +1278,63 @@ function chipResultado(c){
   return `<span class="chip ${cl}" title="${esc(RESULTADOS[c]||'')}">${c}</span>`;
 }
 
-/* ---------- Persistencia (localStorage) ---------- */
+/* ---------- Persistencia: IndexedDB (principal) + localStorage (respaldo/migración) ----------
+   En file:// el localStorage comparte UNA cuota pequeña entre todos los archivos locales y se
+   llena (aunque los datos sean pocos). IndexedDB tiene cuota amplia y es fiable también en file://.
+   Guardamos en ambos: IndexedDB es el principal; localStorage queda como respaldo rápido. El aviso
+   crítico solo aparece si NINGUNO de los dos pudo guardar el trabajo del usuario. */
 const LS_DATOS='gmp2026.datos', LS_USUARIO='gmp2026.usuario', LS_PREF='gmp2026.pref';
 let prefs={};   /* memoria de uso: última fecha MP, último ejecutor, último responsable ejecutivo */
 function cargarPrefs(){ try{ prefs=JSON.parse(localStorage.getItem(LS_PREF)||'{}')||{}; }catch(e){ prefs={}; } }
-function guardarPrefs(){ try{ localStorage.setItem(LS_PREF, JSON.stringify(prefs)); }catch(e){} }
+function guardarPrefs(){ try{ localStorage.setItem(LS_PREF, JSON.stringify(prefs)); }catch(e){} idbSet(LS_PREF, JSON.stringify(prefs)); }
 function setLS(k,v){ try{ localStorage.setItem(k,v); return true; }catch(e){ return false; } }
-let _avisoPlanillaMostrado=false;
+/* --- IndexedDB mínimo (almacén clave→valor) --- */
+let _idb=null;
+function idbAbrir(){ return new Promise(res=>{ try{
+  if(!window.indexedDB){ res(null); return; }
+  const rq=indexedDB.open('gmp2026',1);
+  rq.onupgradeneeded=()=>{ try{ rq.result.createObjectStore('kv'); }catch(e){} };
+  rq.onsuccess=()=>res(rq.result);
+  rq.onerror=()=>res(null); rq.onblocked=()=>res(null);
+}catch(e){ res(null); } }); }
+function idbSet(k,v){ return new Promise(res=>{ if(!_idb){ res(false); return; } try{
+  const tx=_idb.transaction('kv','readwrite'); tx.objectStore('kv').put(v,k);
+  tx.oncomplete=()=>res(true); tx.onerror=()=>res(false); tx.onabort=()=>res(false);
+}catch(e){ res(false); } }); }
+function idbGet(k){ return new Promise(res=>{ if(!_idb){ res(null); return; } try{
+  const tx=_idb.transaction('kv','readonly'); const rq=tx.objectStore('kv').get(k);
+  rq.onsuccess=()=>res(rq.result==null?null:rq.result); rq.onerror=()=>res(null);
+}catch(e){ res(null); } }); }
 function guardar(){
-  /* Prioridad: el trabajo del usuario (manuales/pendientes/correctivos) es IRRECUPERABLE; la
-     planilla (equipos/registros) siempre se puede recargar desde el Excel. Por eso, si no hay
-     espacio, se libera la planilla para hacerle sitio a los datos de usuario. */
+  /* El trabajo del usuario (manuales/pendientes/correctivos) es IRRECUPERABLE; la planilla se
+     recupera del Excel. Guardamos en IndexedDB (principal) y en localStorage (respaldo rápido). */
   const blobUsuario = JSON.stringify({manuales:state.manuales, pendientes:state.pendientes, correctivos:state.correctivos, empresas:state.empresas, ingenieros:state.ingenieros});
-  let okUsuario = setLS(LS_USUARIO, blobUsuario);
-  let planillaGuardada = false;
-  if(okUsuario){
-    planillaGuardada = setLS(LS_DATOS, JSON.stringify({equipos:state.equipos, registros:state.registros, meta:state.meta}));
-  } else {
-    try{ localStorage.removeItem(LS_DATOS); }catch(e){}     /* libera la planilla (recuperable) */
-    okUsuario = setLS(LS_USUARIO, blobUsuario);              /* y reintenta los datos de usuario */
-  }
-  if(okUsuario && !planillaGuardada){
-    if(!_avisoPlanillaMostrado){ _avisoPlanillaMostrado=true;
-      toast('ℹ️ La planilla no cabe en el navegador y no se guardó localmente (tus registros sí). Al reabrir, vuelve a cargar el Excel.'); }
-  } else if(okUsuario && planillaGuardada){ _avisoPlanillaMostrado=false; }
-  bannerGuardado(!okUsuario);
+  const blobDatos = JSON.stringify({equipos:state.equipos, registros:state.registros, meta:state.meta});
+  /* localStorage: respaldo, prioriza los datos de usuario (la planilla puede no caber en file://) */
+  let okLS = setLS(LS_USUARIO, blobUsuario);
+  if(okLS) setLS(LS_DATOS, blobDatos);
+  else { try{ localStorage.removeItem(LS_DATOS); }catch(e){} okLS = setLS(LS_USUARIO, blobUsuario); }
+  /* IndexedDB: almacén principal (asíncrono, cuota amplia) */
+  idbSet(LS_DATOS, blobDatos);
+  idbSet(LS_USUARIO, blobUsuario).then(okIDB=>{ bannerGuardado(!(okLS||okIDB)); });
 }
 function bannerGuardado(critico){
   const el=$('#aviso-guardado'); if(!el) return;
   if(critico){ el.classList.add('activo'); }
-  else if(el.classList.contains('activo')){ el.classList.remove('activo'); toast('✅ Almacenamiento liberado: tus cambios vuelven a guardarse.'); }
+  else if(el.classList.contains('activo')){ el.classList.remove('activo'); toast('✅ Almacenamiento restablecido: tus cambios vuelven a guardarse.'); }
 }
-function cargarLocal(){
-  try{ const u=JSON.parse(localStorage.getItem(LS_USUARIO)||'null'); if(u){ state.manuales=u.manuales||[]; state.pendientes=u.pendientes||[]; state.correctivos=u.correctivos||[]; state.empresas=u.empresas||[]; state.ingenieros=u.ingenieros||[]; } }catch(e){}
-  try{ const d=JSON.parse(localStorage.getItem(LS_DATOS)||'null'); if(d){ state.equipos=d.equipos||[]; state.registros=d.registros||[]; state.meta=d.meta||null; } }catch(e){}
+async function cargarLocal(){
+  /* Preferir IndexedDB (principal); si está vacío, leer de localStorage y migrar a IndexedDB. */
+  let u=null, d=null, desdeLS=false;
+  try{ const s=await idbGet(LS_USUARIO); if(s) u=JSON.parse(s); }catch(e){}
+  try{ const s=await idbGet(LS_DATOS);   if(s) d=JSON.parse(s); }catch(e){}
+  if(!u){ try{ u=JSON.parse(localStorage.getItem(LS_USUARIO)||'null'); if(u) desdeLS=true; }catch(e){} }
+  if(!d){ try{ d=JSON.parse(localStorage.getItem(LS_DATOS)||'null'); if(d) desdeLS=true; }catch(e){} }
+  if(u){ state.manuales=u.manuales||[]; state.pendientes=u.pendientes||[]; state.correctivos=u.correctivos||[]; state.empresas=u.empresas||[]; state.ingenieros=u.ingenieros||[]; }
+  if(d){ state.equipos=d.equipos||[]; state.registros=d.registros||[]; state.meta=d.meta||null; }
   normalizarEstado();
+  poblarDatalistIngenieros();
+  if(desdeLS && _idb) guardar();   /* migración: siembra IndexedDB con lo que estaba en localStorage */
 }
 /* Sanea el estado para tolerar respaldos antiguos, parciales o editados a mano:
    garantiza que cada colección y cada estructura tenga su forma esperada (arrays nunca undefined). */
@@ -2778,7 +2803,7 @@ function abrirModalMP(equipoKey, registro){
   setToggle('mp-tipo', registro?registro.tipoRegistro:'Borrador', CLASES_TIPO);
   setToggle('mp-tipo-mant', registro?(registro.tipoMantenimiento||'Interno'):'Interno', CLASES_MANT);
   /* MP externa: ingeniero externo + empresa (para el protocolo de mantenimiento externo) */
-  $('#mp-ing-ext').innerHTML = opcionesIngenieros(registro?(registro.ingenieroExterno||''):'');
+  $('#mp-ing-ext').value = registro?(registro.ingenieroExterno||''):'';
   $('#mp-ext-empresa').innerHTML = opcionesEmpresas(registro?(registro.empresaExterna||''):'');
   toggleMPExterno();
   $('#mp-gestion').checked = registro?!!registro.gestionPendiente:false;
@@ -2830,7 +2855,7 @@ function guardarMP(){
     estadoEquipo:valToggle('mp-estado')||'Operativo',
     gestionPendiente:$('#mp-gestion').checked,
     tipoMantenimiento:valToggle('mp-tipo-mant')||'Interno',
-    ingenieroExterno: (valToggle('mp-tipo-mant')==='Externo') ? ($('#mp-ing-ext').value==='__nuevo__'?'':$('#mp-ing-ext').value) : '',
+    ingenieroExterno: (valToggle('mp-tipo-mant')==='Externo') ? registrarIngeniero($('#mp-ing-ext').value) : '',
     empresaExterna: (valToggle('mp-tipo-mant')==='Externo') ? ($('#mp-ext-empresa').value==='__nueva__'?'':$('#mp-ext-empresa').value) : '',
     tipoRegistro:valToggle('mp-tipo')||'Borrador'
   };
@@ -3427,25 +3452,16 @@ function opcionesEmpresas(sel){
     ops.map(x=>`<option ${x===sel?'selected':''}>${esc(x)}</option>`).join('')+
     '<option value="__nueva__">➕ Agregar nueva empresa…</option>';
 }
-function opcionesIngenieros(sel){
-  const ops = (state.ingenieros||[]).slice();
-  if(sel && !ops.includes(sel)) ops.push(sel);
-  ops.sort((a,b)=>a.localeCompare(b,'es'));
-  return '<option value="">— Seleccionar —</option>'+
-    ops.map(x=>`<option ${x===sel?'selected':''}>${esc(x)}</option>`).join('')+
-    '<option value="__nuevo__">➕ Agregar nuevo ingeniero…</option>';
+/* Ingenieros externos: campo de texto libre con autocompletado (datalist). Se escribe el nombre y
+   se recuerda para la próxima; no hay que elegir de una lista vacía ni usar diálogos. */
+function poblarDatalistIngenieros(){
+  const dl=$('#lista-ingenieros'); if(!dl) return;
+  dl.innerHTML=(state.ingenieros||[]).slice().sort((a,b)=>a.localeCompare(b,'es')).map(x=>`<option value="${esc(x)}"></option>`).join('');
 }
-/* Conecta un <select> de ingenieros con el alta rápida «➕ Agregar nuevo ingeniero…» */
-function enlazarSelectIngeniero(sel){
-  if(!sel) return;
-  sel.addEventListener('change',ev=>{
-    if(ev.target.value!=='__nuevo__') return;
-    const nombre=(prompt('Nombre del ingeniero externo:')||'').trim();
-    if(nombre){
-      if(!state.ingenieros.some(x=>x.toLowerCase()===nombre.toLowerCase())){ state.ingenieros.push(nombre); guardar(); }
-      ev.target.innerHTML=opcionesIngenieros(nombre);
-    } else ev.target.value='';
-  });
+function registrarIngeniero(nombre){
+  nombre=(nombre||'').trim();
+  if(nombre && !state.ingenieros.some(x=>x.toLowerCase()===nombre.toLowerCase())){ state.ingenieros.push(nombre); poblarDatalistIngenieros(); }
+  return nombre;
 }
 let avEditando=null;   /* {ot, av} cuando se está corrigiendo un avance de la bitácora */
 function abrirModalAvance(otId, tipoForzado){
@@ -3635,7 +3651,10 @@ function guardarAvance(){
   const avisos=avisosOrden(hitosExpediente(ot, ejec));
   guardar(); cerrarModal('modal-avance'); renderTodo();
   toast(avisos.length ? '⚠️ Guardado, pero revisa el orden: '+avisos[0] : txtOk);
-  if(pendienteRetornoNuevo) toast('📋 Pendiente creado: gestionar el reporte de reparación que faltó en el retorno.');
+  if(pendienteRetornoNuevo){
+    toast('📋 Pendiente creado: gestiona el reporte de reparación que faltó en el retorno.');
+    abrirModalPendiente(pendienteRetornoNuevo.equipoKey, pendienteRetornoNuevo, null);
+  }
 }
 function abrirModalOT(equipoKey, ot){
   const e=equipoPorKey(equipoKey); if(!e) return;
@@ -3693,7 +3712,7 @@ function cargarFormOT(ot){
   $('#ot-env-empresa').innerHTML = opcionesEmpresas(ot?(ot.empresa||''):'');
   $('#ot-env-numero').value = ot?(ot.numeroEnvio||''):'';
   /* Reporte de Servicio: datos del ingeniero externo */
-  $('#ot-ing-ext').innerHTML = opcionesIngenieros(ot?(ot.ingenieroExterno||''):'');
+  $('#ot-ing-ext').value = ot?(ot.ingenieroExterno||''):'';
   $('#ot-serv-empresa').innerHTML = opcionesEmpresas(ot?(ot.empresa||''):'');
   $('#ot-reporte-num').value = ot?(ot.numeroReporteServicio||''):'';
   setToggle('ot-servicio-tipo', ot?(ot.tipoServicio||'Reparación'):'Reparación', null);
@@ -3755,7 +3774,7 @@ function guardarOT(){
   /* Reporte de Servicio: datos del ingeniero externo (reparación / diagnóstico) */
   let ingenieroExterno='', numeroReporteServicio='', tipoServicio='';
   if(esReporte){
-    const ie=$('#ot-ing-ext').value; ingenieroExterno = ie==='__nuevo__'?'':ie;
+    ingenieroExterno = registrarIngeniero($('#ot-ing-ext').value);
     numeroReporteServicio=$('#ot-reporte-num').value.trim();
     tipoServicio=valToggle('ot-servicio-tipo')||'Reparación';
     const se=$('#ot-serv-empresa').value; const empServ = se==='__nueva__'?'':se;
@@ -4713,7 +4732,6 @@ function conectarEventos(){
       ev.target.innerHTML=opcionesEmpresas(nombre);
     } else ev.target.value='';
   });
-  enlazarSelectIngeniero($('#ot-ing-ext'));
   $$('#ot-servicio-tipo button').forEach(b=>b.addEventListener('click',()=>setToggle('ot-servicio-tipo',b.dataset.v,null)));
   $('#ot-gestion').addEventListener('change',ev=>$('#ot-gestion-txt').textContent=ev.target.checked?'Sí':'No');
   $$('#ot-estado-evento button').forEach(b=>b.addEventListener('click',()=>{
@@ -4753,7 +4771,6 @@ function conectarEventos(){
   $$('#mp-estado button').forEach(b=>b.addEventListener('click',()=>setToggle('mp-estado',b.dataset.v,CLASES_ESTADO)));
   $$('#mp-tipo button').forEach(b=>b.addEventListener('click',()=>setToggle('mp-tipo',b.dataset.v,CLASES_TIPO)));
   $$('#mp-tipo-mant button').forEach(b=>b.addEventListener('click',()=>{ setToggle('mp-tipo-mant',b.dataset.v,CLASES_MANT); toggleMPExterno(); actualizarHintGestionMP(); }));
-  enlazarSelectIngeniero($('#mp-ing-ext'));
   $('#mp-ext-empresa').addEventListener('change',ev=>{
     if(ev.target.value!=='__nueva__') return;
     const nombre=(prompt('Nombre de la nueva empresa:')||'').trim();
@@ -4933,7 +4950,7 @@ function conectarEventos(){
 }
 
 /* ---------- Inicio ---------- */
-(function init(){
+(async function init(){
   if(typeof XLSX==='undefined'){
     $('#aviso-xlsx').style.display='';
     $('#btn-elegir').disabled=true;
@@ -4941,7 +4958,8 @@ function conectarEventos(){
   poblarSelects();
   conectarEventos();
   cargarPrefs();
-  cargarLocal();
+  _idb = await idbAbrir();
+  await cargarLocal();
   renderTodo();
   mostrarVista(state.equipos.length ? 'inicio' : 'carga');
   setTimeout(()=>{
