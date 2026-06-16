@@ -151,6 +151,16 @@ table.equipos tbody tr:hover td{background:var(--azul-claro)}
 .det-cab{display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap}
 .det-cab h2{font-size:1.25rem}
 .det-acciones{margin-left:auto;display:flex;gap:10px;flex-wrap:wrap}
+.det-banner{display:flex;flex-wrap:wrap;align-items:center;gap:9px 18px;margin:12px 0 2px;padding:11px 14px;border:1px solid var(--gris-2);border-left:5px solid var(--gris-3);border-radius:9px;background:var(--gris-1)}
+.det-banner.rojo{border-left-color:var(--rojo);background:var(--rojo-bg)}
+.det-banner.ambar{border-left-color:var(--ambar);background:var(--ambar-bg)}
+.det-banner.azul{border-left-color:var(--azul);background:var(--azul-claro)}
+.det-banner.morado{border-left-color:var(--morado);background:var(--morado-bg)}
+.det-banner.verde{border-left-color:var(--verde);background:var(--verde-bg)}
+.det-banner.teal{border-left-color:var(--teal);background:var(--teal-bg)}
+.db-sig{display:flex;align-items:center;gap:9px}
+.db-lbl{font-size:.7rem;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-4);font-weight:700;white-space:nowrap}
+.db-ind{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-left:auto}
 .grid-campos{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:10px;margin-top:14px}
 .campo-box{background:var(--gris-1);border:1px solid var(--gris-2);border-radius:8px;padding:8px 12px;cursor:copy}
 .campo-box:hover{border-color:var(--azul)}
@@ -455,6 +465,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
         <button class="btn" id="btn-abrir-ot">🔩 Mantenimiento Correctivo</button>
       </div>
     </div>
+    <div id="det-estado"></div>
     <div class="grid-campos" id="det-campos"></div>
   </div>
 
@@ -919,7 +930,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-16.29';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-16.30';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -939,16 +950,17 @@ const CAMPOS = [
   {k:'clasificacion',l:'Clasificación',    col:'O'},
   {k:'enu',         l:'ENU / Baja',        col:'P'}
 ];
-/* Columnas calculadas de la vista de equipos (estado, última actualización, pendientes) */
+/* Columnas calculadas de la vista de equipos (motor de estado integral) */
 const CAMPOS_CALC = [
   {k:'_estado',      l:'Estado equipo'},
   {k:'_diasEstado',  l:'Días en estado'},
+  {k:'_siguiente',   l:'Siguiente acción'},
   {k:'_actualizado', l:'Última actualización'},
   {k:'_pend',        l:'Pendientes'}
 ];
 const CAMPOS_TABLA = CAMPOS.concat(CAMPOS_CALC);
 /* columnas visibles por defecto en la vista de equipos: caben sin desplazamiento horizontal */
-const COLS_EQ_DEFECTO = ['equipo','serie','inventario','servicio','ubicacion','_estado','_diasEstado','_actualizado','_pend'];
+const COLS_EQ_DEFECTO = ['equipo','serie','inventario','servicio','_estado','_diasEstado','_siguiente','_actualizado','_pend'];
 /* Columnas de la vista Plan de Mantenimiento (una fila por evento de mantención) */
 const PLAN_COLS = [
   {k:'id',l:'ID'},{k:'carpeta',l:'N° Carpeta'},{k:'inventario',l:'N° Inventario'},{k:'equipo',l:'Equipo'},
@@ -1336,31 +1348,35 @@ function renderOperatividad(){
   const nST=lista.filter(i=>i.estado==='Servicio Técnico').length;
   const nGes=lista.filter(i=>i.expAbiertos).length;
   const nPla=lista.filter(i=>i.planilla && !i.expAbiertos && !i.estado).length;
+  const nPend=lista.filter(i=>!i.estado && !i.expAbiertos && (i.equipo._pendVencidos||i.equipo._protoSinResolver)).length;
   const resumen = `<div class="fila-flex" style="margin-bottom:12px">
     ${nNoOp?`<span class="chip rojo">🔴 ${nNoOp} no operativo${nNoOp>1?'s':''}</span>`:''}
-    ${nST?`<span class="chip ambar">🔧 ${nST} en servicio técnico</span>`:''}
+    ${nST?`<span class="chip morado">🔧 ${nST} en servicio técnico</span>`:''}
     ${nGes?`<span class="chip azul">📂 ${nGes} con expediente abierto</span>`:''}
-    ${nPla?`<span class="chip morado">📋 ${nPla} FS/NU según planilla</span>`:''}
+    ${nPend?`<span class="chip ambar">📋 ${nPend} con pendientes/protocolos por resolver</span>`:''}
+    ${nPla?`<span class="chip morado">⚠ ${nPla} FS/NU según planilla</span>`:''}
   </div>`;
   const filas = lista.map(it=>{
     const e=it.equipo;
     const estChip = it.estado==='No Operativo' ? '<span class="chip rojo">✖ No Operativo</span>'
-      : it.estado==='Servicio Técnico' ? '<span class="chip ambar">🔧 Servicio Técnico</span>'
-      : it.expAbiertos ? '<span class="chip verde">Operativo</span>' : '<span class="chip gris">Sin estado en app</span>';
+      : it.estado==='Servicio Técnico' ? '<span class="chip morado">🔧 Servicio Técnico</span>'
+      : it.estado==='Operativo' ? '<span class="chip verde">✔ Operativo</span>' : '<span class="chip gris">Sin estado en app</span>';
     const gestion = it.etapa
       ? `<strong>${esc(it.etapa)}</strong><br><small style="color:var(--gris-4)">${esc(it.gestionTxt||'')} · ${fmtFecha(it.gestionFecha)}</small>`
       : it.planilla ? `<span class="chip ${it.planilla.cod==='FS'?'rojo':'morado'}">${it.planilla.cod} en ${MESES[it.planilla.mes]} (planilla)</span><br><small style="color:var(--gris-4)">sin resolución posterior ni expediente</small>`
       : '—';
     const dias = it.dias ? `<strong style="${it.estado==='No Operativo'?'color:var(--rojo)':''}">${it.dias} días</strong>` : '—';
+    const sig = it.sig ? `<span class="chip ${SIG_CLASE[it.sig.tipo]||'gris'}">${esc(it.sig.texto)}</span>` : '—';
     return `<tr class="click" data-oper-eq="${esc(it.equipoKey)}">
       <td><strong>${esc(e?e.equipo:it.equipoKey)}</strong><br><small style="color:var(--gris-4)">${esc(e?('Serie '+(e.serie||'—')+' · '+(e.servicio||'')):'')}</small></td>
       <td>${estChip}</td>
-      <td style="max-width:340px">${gestion}</td>
+      <td style="max-width:300px">${gestion}</td>
       <td>${dias}</td>
+      <td style="max-width:300px">${sig}</td>
     </tr>`;
   }).join('');
   $('#lista-operatividad').innerHTML = resumen + `<div style="overflow:auto"><table class="lista">
-    <tr><th>Equipo</th><th>Último estado</th><th>Última gestión / situación</th><th>Días</th></tr>${filas}</table></div>`;
+    <tr><th>Equipo</th><th>Último estado</th><th>Última gestión / situación</th><th>Días</th><th>Siguiente acción</th></tr>${filas}</table></div>`;
 }
 
 /* ---------- Resumen de carga ---------- */
@@ -1799,6 +1815,23 @@ function colsEquiposVisibles(){
   const sel = (prefs.colsEquipos && prefs.colsEquipos.length) ? new Set(prefs.colsEquipos) : new Set(COLS_EQ_DEFECTO);
   return CAMPOS_TABLA.filter(c=>sel.has(c.k));
 }
+function chipEstadoEq(est){
+  if(est==='Operativo') return '<span class="chip verde">✔ Operativo</span>';
+  if(est==='No Operativo') return '<span class="chip rojo">✖ No Operativo</span>';
+  if(est==='Servicio Técnico') return '<span class="chip morado">🔧 Servicio Técnico</span>';
+  return '<span class="chip gris">— sin registro</span>';
+}
+function chipSiguiente(e){
+  const s=e._sig; if(!s) return '—';
+  return `<span class="chip ${SIG_CLASE[s.tipo]||'gris'}" title="${esc(s.texto)}">${esc(s.texto)}</span>`;
+}
+function celdaEquipo(e,c){
+  if(c.k==='_estado')    return `<td>${chipEstadoEq(e._estado)}</td>`;
+  if(c.k==='_siguiente') return `<td style="max-width:320px">${chipSiguiente(e)}</td>`;
+  if(c.k==='_pend'){ const cls=e._pendVencidos?'rojo':(e._pendN?'ambar':'gris'); return `<td><span class="chip ${cls}">${esc(e._pend)}</span></td>`; }
+  const v=e[c.k]||'';
+  return `<td title="${esc(v)}">${esc(v)||'—'}</td>`;
+}
 function renderTabla(){
   const COLS=colsEquiposVisibles();
   const thead=$('#thead-equipos');
@@ -1824,7 +1857,7 @@ function renderTabla(){
     tbody.innerHTML = `<tr><td colspan="${COLS.length}"><div class="vacio">Ningún equipo coincide con los filtros aplicados.</div></td></tr>`;
   } else {
     tbody.innerHTML = visibles.map(e =>
-      `<tr data-key="${esc(e.key)}">` + COLS.map(c=>`<td title="${esc(e[c.k])}">${esc(e[c.k])}</td>`).join('') + '</tr>'
+      `<tr data-key="${esc(e.key)}">` + COLS.map(c=>celdaEquipo(e,c)).join('') + '</tr>'
     ).join('');
   }
   $('#contador-filas').textContent = `Mostrando ${filas.length} de ${state.equipos.length} equipos`;
@@ -2082,6 +2115,19 @@ function renderDetalle(key){
       : '<span class="chip rojo">✖ No Operativo</span>');
   chips.push(`<span class="chip gris" data-copiar="${esc(key)}" style="cursor:copy" title="Clic para copiar">Identificador: ${esc(key)}</span>`);
   $('#det-chips').innerHTML = chips.join('');
+  /* Banner de estado integral: la «siguiente acción» y los indicadores que aseguran la operatividad */
+  const sig=e._sig||decidirSiguienteAccion(e);
+  const ind=[];
+  if(e._estado) ind.push(`${chipEstadoEq(e._estado)}${e._diasEstado!==''?` <small style="color:var(--gris-4)">${e._diasEstado} d en estado</small>`:''}`);
+  if(e._otAbierta) ind.push(`<span class="chip rojo">📂 OT · ${esc(e._otAbierta.etapa)}${e._otAbierta.dias!=null?' · '+e._otAbierta.dias+' d':''}</span>`);
+  if(e._mpMesPend) ind.push(`<span class="chip azul">MP de ${MESES[new Date().getMonth()]} pendiente</span>`);
+  if(e._mpVencidas) ind.push(`<span class="chip azul">${e._mpVencidas} MP de meses anteriores</span>`);
+  if(e._pendN) ind.push(`<span class="chip ${e._pendVencidos?'rojo':'ambar'}">${esc(e._pend)}${e._pendVencidos?' · '+e._pendVencidos+' vencido'+(e._pendVencidos>1?'s':''):''}</span>`);
+  if(e._protoSinResolver) ind.push(`<span class="chip ambar">${e._protoSinResolver} protocolo${e._protoSinResolver>1?'s':''} sin resolver</span>`);
+  if(e._fsNu) ind.push(`<span class="chip morado">${esc(e._fsNu)} sin resolución (planilla)</span>`);
+  $('#det-estado').innerHTML = `<div class="det-banner ${SIG_CLASE[sig.tipo]||'gris'}">
+    <div class="db-sig"><span class="db-lbl">Siguiente acción</span><span class="chip ${SIG_CLASE[sig.tipo]||'gris'}">${esc(sig.texto)}</span></div>
+    ${ind.length?`<div class="db-ind">${ind.join(' ')}</div>`:''}</div>`;
   $('#det-campos').innerHTML = CAMPOS.map(c=>`<div class="campo-box" title="Clic para copiar"><label>${esc(c.l)}</label><div>${esc(e[c.k])||'—'}</div></div>`).join('');
 
   const regsEq = state.registros.filter(r=>r.equipoKey===key);
@@ -2587,18 +2633,69 @@ function ultimaActualizacionEquipo(key){
   });
   return f.filter(Boolean).sort().pop()||'';
 }
+/* =====================================================================
+   MOTOR DE ESTADO INTEGRAL DEL EQUIPO  (una sola verdad por equipo)
+   Reúne operatividad, cumplimiento del plan MP, pendientes/protocolos y
+   correctivos en un único cálculo del que se derivan la tabla de Equipos,
+   la ficha y el tablero de Operatividad. Cada equipo obtiene su estado,
+   su criticidad y la «siguiente acción» recomendada para asegurar su
+   operatividad, de modo que todo queda conectado y consistente.
+   ===================================================================== */
+function fsNuPendiente(resArr){
+  /* FS/NU vigente: el peor FS/NU sin un Si/Si-RA posterior (y sin Baja) */
+  if(!resArr || !resArr.length || resArr.some(r=>r.resultado==='Baja')) return null;
+  const malos=resArr.filter(r=>r.resultado==='FS'||r.resultado==='NU');
+  if(!malos.length) return null;
+  const peor=malos.slice().sort((a,b)=>b.mes-a.mes)[0];
+  if(resArr.some(r=>(r.resultado==='Si'||r.resultado==='Si-RA') && r.mes>peor.mes)) return null;
+  return peor;   // {resultado, mes, ...}
+}
+const SIG_CLASE={detenido:'rojo', correctivo:'rojo', pendiente:'ambar', protocolo:'ambar', mp:'azul', planilla:'morado', ok:'verde', sindatos:'gris'};
+function decidirSiguienteAccion(e){
+  /* {prio, texto, tipo} — menor prio = más urgente para la operatividad */
+  const cand=[]; const add=(prio,texto,tipo)=>cand.push({prio,texto,tipo});
+  const noOper=e._estado==='No Operativo', enST=e._estado==='Servicio Técnico', ot=e._otAbierta;
+  if((noOper||enST) && ot) add(1, 'Equipo '+e._estado.toLowerCase()+' · '+ot.etapa+(ot.dias!=null?' · '+ot.dias+' d detenido':''), 'detenido');
+  else if(noOper||enST)     add(2, 'Equipo '+e._estado.toLowerCase()+' sin OT · abrir correctivo', 'correctivo');
+  else if(ot)               add(3, 'Avanzar expediente · '+ot.etapa+(ot.dias!=null?' · '+ot.dias+' d':''), 'correctivo');
+  if(e._pendVencidos)       add(4, e._pendVencidos+' pendiente'+(e._pendVencidos>1?'s':'')+' vencido'+(e._pendVencidos>1?'s':'')+' · resolver', 'pendiente');
+  if(e._protoSinResolver)   add(5, e._protoSinResolver+' protocolo'+(e._protoSinResolver>1?'s':'')+' sin resolver', 'protocolo');
+  if(e._mpMesPend)          add(6, 'MP de '+MESES[new Date().getMonth()]+' programada · ejecutar', 'mp');
+  if(e._mpVencidas)         add(7, e._mpVencidas+' MP de meses anteriores sin ejecutar', 'mp');
+  if(e._fsNu)               add(8, 'Resultado '+e._fsNu+' sin resolución · verificar', 'planilla');
+  if(e._pendN && !cand.some(c=>c.tipo==='pendiente'||c.tipo==='protocolo')) add(9, e._pendN+' pendiente'+(e._pendN>1?'s':'')+' en gestión', 'pendiente');
+  if(!cand.length) return e._estado ? {prio:50, texto:'Operativo · sin acciones', tipo:'ok'} : {prio:60, texto:'Sin registros', tipo:'sindatos'};
+  return cand.sort((a,b)=>a.prio-b.prio)[0];
+}
 function calcularDerivadosEquipos(){
-  /* columnas calculadas de la tabla de equipos: estado, última actualización y pendientes */
-  const pendPorEq={};
-  state.pendientes.forEach(p=>{ if(p.estado!=='Completado') pendPorEq[p.equipoKey]=(pendPorEq[p.equipoKey]||0)+1; });
-  const hoy=hoyISO();
+  const hoy=hoyISO(), mesAct=new Date().getMonth();
+  /* índices construidos una sola vez (rendimiento con cientos de equipos) */
+  const pendPorEq={}; state.pendientes.forEach(p=>{ (pendPorEq[p.equipoKey]=pendPorEq[p.equipoKey]||[]).push(p); });
+  const resPorEq={};  resultadosPorMes().forEach(r=>{ (resPorEq[r.equipoKey]=resPorEq[r.equipoKey]||[]).push(r); });
+  const otPorEq={};
+  expedientesDe(state.correctivos).map(nodosExpediente).forEach(x=>{
+    if(x.cerrado) return; const k=x.ot.equipoKey, cur=otPorEq[k];
+    if(!cur || (x.dias||0)>(cur.dias||0)) otPorEq[k]={etapa:etapaActualDe(x), dias:x.dias, critico:x.critico, folio:x.ot.folioSigem||'', n:(cur?cur.n:0)+1};
+    else cur.n++;
+  });
   state.equipos.forEach(e=>{
-    const info = estadoActualEquipoInfo(e.key);
-    e._estado = info?info.est:'';
-    e._diasEstado = (info && info.f) ? String(diasEntre(info.f, hoy)) : '';
-    e._actualizado = ultimaActualizacionEquipo(e.key);
-    const n = pendPorEq[e.key]||0;
-    e._pend = n ? ('Sí ('+n+')') : 'No';
+    const info=estadoActualEquipoInfo(e.key);
+    e._estado=info?info.est:'';
+    e._estadoFecha=info?info.f:'';
+    e._diasEstado=(info&&info.f)?String(diasEntre(info.f,hoy)):'';
+    e._actualizado=ultimaActualizacionEquipo(e.key);
+    const pend=(pendPorEq[e.key]||[]).filter(p=>p.estado!=='Completado');
+    e._pendN=pend.length;
+    e._pend = pend.length?('Sí ('+pend.length+')'):'No';
+    e._pendVencidos=pend.filter(p=>!p.esperaDe && p.fechaCompromiso && p.fechaCompromiso<hoy).length;
+    e._protoSinResolver=pend.reduce((n,p)=>n+(p.tareas||[]).filter(t=>t.opciones&&t.opciones.length&&!tareaResuelta(t)).length,0);
+    const res=resPorEq[e.key]||[]; const resMes={}; res.forEach(r=>resMes[r.mes]=r);
+    e._mpMesPend = !!(e.prog&&e.prog[mesAct]) && !resMes[mesAct];
+    let venc=0; for(let m=0;m<mesAct;m++){ if(e.prog&&e.prog[m] && !resMes[m]) venc++; } e._mpVencidas=venc;
+    e._otAbierta=otPorEq[e.key]||null;
+    const fs=fsNuPendiente(res); e._fsNu=fs?fs.resultado:''; e._fsNuMes=fs?fs.mes:null;
+    const sig=decidirSiguienteAccion(e);
+    e._sig=sig; e._siguiente=sig.texto; e._crit=sig.prio;
   });
 }
 function filasPlanBase(){
@@ -2710,43 +2807,28 @@ function resultadosPorMes(){
   return [...mapa.values()];
 }
 function tableroOperatividad(){
-  const items=new Map();
-  const get=k=>{ if(!items.has(k)) items.set(k,{equipoKey:k}); return items.get(k); };
-  /* 1) expedientes correctivos abiertos */
-  expedientesDe(state.correctivos).forEach(exp=>{
-    const x=nodosExpediente(exp);
-    if(x.cerrado) return;
-    const it=get(x.ot.equipoKey);
-    const avs=(x.ot.avances||[]).slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
-    const ult=avs[avs.length-1];
-    it.gestionTxt = ult?ult.tipo:('OT abierta · folio '+(x.ot.folioSigem||'—'));
-    it.gestionFecha = ult?ult.fecha:x.ot.fechaDocumento;
-    it.etapa = etapaActualDe(x);
-    it.dias = Math.max(it.dias||0, x.dias||0);
-    it.expAbiertos=(it.expAbiertos||0)+1;
+  /* equipos que requieren atención, derivados del motor de estado integral
+     (estado no operativo / en ST, expediente abierto, FS-NU sin resolver,
+      pendientes vencidos o protocolos sin resolver) */
+  const hoy=hoyISO();
+  const lista = state.equipos.filter(e=>
+    (e._estado && e._estado!=='Operativo') || e._otAbierta || e._fsNu || e._pendVencidos>0 || e._protoSinResolver>0
+  ).map(e=>{
+    const ot=e._otAbierta;
+    return {
+      equipoKey:e.key, equipo:e, estado:e._estado||'',
+      expAbiertos: ot?ot.n:0, etapa: ot?ot.etapa:'',
+      gestionTxt: ot?('OT '+(ot.folio?('folio '+ot.folio):'abierta')):'',
+      gestionFecha: e._estadoFecha||'',
+      planilla: e._fsNu ? {cod:e._fsNu, mes:e._fsNuMes} : null,
+      dias: ot ? ot.dias : (e._estadoFecha?diasEntre(e._estadoFecha,hoy):0),
+      sig: e._sig
+    };
   });
-  /* 2) estado físico actual de todos los equipos */
-  state.equipos.forEach(e=>{
-    const est=estadoActualEquipo(e.key);
-    if(est && est!=='Operativo') get(e.key).estado=est;
-    else if(items.has(e.key)) items.get(e.key).estado=est||'';
-  });
-  /* 3) FS / NU sin resolución posterior, según resultados unificados (planilla + app) */
-  const porEq={};
-  resultadosPorMes().forEach(r=>{ (porEq[r.equipoKey]=porEq[r.equipoKey]||[]).push(r); });
-  Object.entries(porEq).forEach(([k,rs])=>{
-    if(rs.some(r=>r.resultado==='Baja')) return;
-    const malos=rs.filter(r=>r.resultado==='FS'||r.resultado==='NU');
-    if(!malos.length) return;
-    const peor=malos.sort((a,b)=>b.mes-a.mes)[0];
-    if(!rs.some(r=>(r.resultado==='Si'||r.resultado==='Si-RA') && r.mes>peor.mes)){
-      const it=get(k); it.planilla={cod:peor.resultado, mes:peor.mes, origen:peor.origen};
-    }
-  });
-  const lista=[...items.values()];
   lista.forEach(it=>{
-    it.equipo = state.equipos.find(e=>e.key===it.equipoKey)||null;
-    it.peso = it.estado==='No Operativo'?0 : it.estado==='Servicio Técnico'?1 : it.expAbiertos?2 : 3;
+    const e=it.equipo;
+    it.peso = it.estado==='No Operativo'?0 : it.estado==='Servicio Técnico'?1 : it.expAbiertos?2
+            : (e._pendVencidos||e._protoSinResolver)?2.5 : 3;
   });
   lista.sort((a,b)=>a.peso-b.peso || (b.dias||0)-(a.dias||0));
   return lista;
