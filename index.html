@@ -916,7 +916,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-16.31';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-16.32';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -1032,6 +1032,38 @@ function tareasProtocolo(tipo){
 }
 /* tipos de pendiente que arman la lista de protocolo al seleccionarlos */
 const TIPO_PEND_PROTOCOLO = {'Protocolo Interno de Mantenimiento':'Interno','Protocolo Externo de Mantenimiento':'Externo'};
+
+/* ---- Reprogramación: ciclo del reporte (generar → imprimir → 2 firmas) ----
+   El reporte de reprogramación se genera, se imprime y lleva dos firmas:
+   la del supervisor del servicio clínico y la del jefe de equipos médicos. */
+const TIPO_PEND_REPROG = 'Reprogramación Mantención Preventiva';
+const ETAPA_REPRO_CLASE = {'Por generar':'rojo','Por imprimir':'ambar','Faltan 2 firmas':'ambar','Falta firma del supervisor':'ambar','Falta firma del jefe':'ambar','Firmado':'verde'};
+const ORD_REPRO = {'Por generar':0,'Por imprimir':1,'Faltan 2 firmas':2,'Falta firma del supervisor':3,'Falta firma del jefe':3,'Firmado':5};
+function esReprogramacion(p){ return /eprogram/i.test((p&&p.tipo)||''); }
+function tareasReprogramacion(causal){
+  const cz = (causal&&/^C[1-8]$/.test(causal)) ? (' (causal '+causal+')') : '';
+  const mk=(clave,texto)=>({texto, hecha:false, clave});
+  return [
+    mk('repro_generar','Generar el reporte de reprogramación'+cz),
+    mk('repro_imprimir','Imprimir el reporte de reprogramación'),
+    mk('repro_firma_sup','Firma del supervisor del servicio clínico'),
+    mk('repro_firma_jefe','Firma del jefe de equipos médicos')
+  ];
+}
+/* etapa del reporte deducida de las tareas con «clave»; sin checklist aún → «Por generar» */
+function etapaReprogramacion(p){
+  if(!esReprogramacion(p) || (p&&p.estado==='Completado')) return '';
+  const tar=p.tareas||[]; const by=k=>tar.find(t=>t.clave===k);
+  if(!by('repro_generar')) return 'Por generar';
+  const done=k=>{ const t=by(k); return !!(t&&t.hecha); };
+  if(!done('repro_generar')) return 'Por generar';
+  if(!done('repro_imprimir')) return 'Por imprimir';
+  const fs=done('repro_firma_sup'), fj=done('repro_firma_jefe');
+  if(!fs&&!fj) return 'Faltan 2 firmas';
+  if(!fs) return 'Falta firma del supervisor';
+  if(!fj) return 'Falta firma del jefe';
+  return 'Firmado';
+}
 
 /* ---------- Estado de la aplicación ---------- */
 let state = {
@@ -1465,7 +1497,9 @@ function renderResumen(){
 function pasaBusqueda(e){
   if(!busqueda) return true;
   const b = sinAcentos(busqueda).toLowerCase();
-  return CAMPOS_TABLA.some(c => sinAcentos(e[c.k]||'').toLowerCase().includes(b));
+  /* además de los campos del equipo, cubre sus correctivos: folio SIGEM, N° de envío, técnico, empresa… */
+  return CAMPOS_TABLA.some(c => sinAcentos(e[c.k]||'').toLowerCase().includes(b))
+    || sinAcentos(e._buscaCorr||'').toLowerCase().includes(b);
 }
 function filasFiltradas(excluir){
   return state.equipos.filter(e =>
@@ -2355,12 +2389,19 @@ function generarPendienteDesdeMP(m){
   const REPRO30=['C1','C5','C6','C7','C8'];
   const compromiso = REPRO30.includes(m.resultado) ? sumarDias(m.fecha,30) : sumarDias(hoyISO(),7);
   const tipoMant = m.tipoMantenimiento||'Interno';
+  /* Causal → ciclo del reporte de reprogramación; si no, protocolo de mantenimiento */
+  const tareas = esCausal ? tareasReprogramacion(m.resultado) : tareasProtocolo(tipoMant);
+  const desc = esCausal
+    ? `Reprogramación por causal ${m.resultado} (MP del ${fmtFecha(m.fecha)}).`+(m.observaciones?' '+m.observaciones:'')
+    : `Generado por MP ${tipoMant.toLowerCase()} del ${fmtFecha(m.fecha)} (resultado ${m.resultado}).`+(m.observaciones?' '+m.observaciones:'');
   return { id:uid(), creado:hoyISO(), origenMP:m.id,
     equipoKey:m.equipoKey, fechaCompromiso:compromiso, tipoMantenimiento:tipoMant,
-    tipo: esCausal ? 'Reprogramación Mantención Preventiva' : ('Protocolo '+tipoMant+' de Mantenimiento'),
-    descripcion:`Generado por MP ${tipoMant.toLowerCase()} del ${fmtFecha(m.fecha)} (resultado ${m.resultado}).`+(m.observaciones?' '+m.observaciones:''),
-    tareas:tareasProtocolo(tipoMant), respAdmin:RESP_ADM_DEFECTO, respEjec:prefs.ultimoRespEje||'',
-    gestiones:[{fecha:new Date().toLocaleString('es-CL'), texto:`Generado automáticamente por la gestión pendiente de la mantención preventiva (${tipoMant.toLowerCase()}).`}],
+    tipo: esCausal ? TIPO_PEND_REPROG : ('Protocolo '+tipoMant+' de Mantenimiento'),
+    descripcion: desc,
+    tareas, respAdmin:RESP_ADM_DEFECTO, respEjec:prefs.ultimoRespEje||'',
+    gestiones:[{fecha:new Date().toLocaleString('es-CL'), texto: esCausal
+      ? `Generado automáticamente por reprogramación (causal ${m.resultado}). Pasos: generar el reporte, imprimirlo y obtener las dos firmas.`
+      : `Generado automáticamente por la gestión pendiente de la mantención preventiva (${tipoMant.toLowerCase()}).`}],
     estado:'Abierto', fechaCompletado:'', esperaDe:'' };
 }
 
@@ -2376,9 +2417,10 @@ function abrirModalPendiente(equipoKey, pendiente, prellenar){
   $('#pe-equipo-nombre').textContent = e ? `${e.equipo} · Serie ${e.serie||'—'} · Inv. ${e.inventario||'—'}` : equipoKey;
   $('#pe-fecha').value = pendiente?pendiente.fechaCompromiso:hoyISO();
   $('#pe-tipo').value = pendiente?pendiente.tipo:(prellenar&&prellenar.tipo)||TIPOS_PENDIENTE[0];
-  /* si el tipo es de protocolo, asegurar su lista de tareas (Sí/No/Imprimir/Gestión) */
+  /* si el tipo es de protocolo, asegurar su lista (Sí/No/Imprimir/Gestión); si es reprogramación, su ciclo de reporte */
   const tmAbrir=TIPO_PEND_PROTOCOLO[$('#pe-tipo').value];
   if(tmAbrir) asegurarProtocoloEnTareas(tmAbrir);
+  else if($('#pe-tipo').value===TIPO_PEND_REPROG) asegurarReprogEnTareas(pendiente&&pendiente.causal);
   $('#pe-descripcion').value = pendiente?pendiente.descripcion:(prellenar&&prellenar.descripcion)||'';
   $('#pe-resp-adm').value = pendiente?pendiente.respAdmin:RESP_ADM_DEFECTO;
   $('#pe-resp-eje').value = pendiente?pendiente.respEjec:(prefs.ultimoRespEje||'');
@@ -2433,6 +2475,11 @@ function asegurarProtocoloEnTareas(tipoMant){
   let n=0;
   tareasProtocolo(tipoMant).forEach(t=>{ if(!existentes.has(t.texto)){ peTareas.push(t); n++; } });
   return n;
+}
+/* agrega el ciclo del reporte de reprogramación si aún no está (por «clave») */
+function asegurarReprogEnTareas(causal){
+  if(peTareas.some(t=>t.clave==='repro_generar')) return 0;
+  const nuevas=tareasReprogramacion(causal); peTareas.push(...nuevas); return nuevas.length;
 }
 /* si quedó texto escrito en los campos «nueva tarea» / «nueva gestión», incorporarlo antes de guardar */
 function volcarEntradasPendiente(){
@@ -2661,7 +2708,7 @@ function fsNuPendiente(resArr){
   if(resArr.some(r=>(r.resultado==='Si'||r.resultado==='Si-RA') && r.mes>peor.mes)) return null;
   return peor;   // {resultado, mes, ...}
 }
-const SIG_CLASE={detenido:'rojo', correctivo:'rojo', pendiente:'ambar', protocolo:'ambar', mp:'azul', planilla:'morado', ok:'verde', sindatos:'gris'};
+const SIG_CLASE={detenido:'rojo', correctivo:'rojo', pendiente:'ambar', protocolo:'ambar', reprograma:'ambar', mp:'azul', planilla:'morado', ok:'verde', sindatos:'gris'};
 function decidirSiguienteAccion(e){
   /* {prio, texto, tipo} — menor prio = más urgente para la operatividad */
   const cand=[]; const add=(prio,texto,tipo)=>cand.push({prio,texto,tipo});
@@ -2670,6 +2717,7 @@ function decidirSiguienteAccion(e){
   else if(noOper||enST)     add(2, 'Equipo '+e._estado.toLowerCase()+' sin OT · abrir correctivo', 'correctivo');
   else if(ot)               add(3, 'Avanzar expediente · '+ot.etapa+(ot.dias!=null?' · '+ot.dias+' d':''), 'correctivo');
   if(e._pendVencidos)       add(4, e._pendVencidos+' pendiente'+(e._pendVencidos>1?'s':'')+' vencido'+(e._pendVencidos>1?'s':'')+' · resolver', 'pendiente');
+  if(e._reproEtapa)         add(5, 'Reporte de reprogramación · '+e._reproEtapa.toLowerCase(), 'reprograma');
   if(e._protoSinResolver)   add(5, e._protoSinResolver+' protocolo'+(e._protoSinResolver>1?'s':'')+' sin resolver', 'protocolo');
   if(e._mpMesPend)          add(6, 'MP de '+MESES[new Date().getMonth()]+' programada · ejecutar', 'mp');
   if(e._mpVencidas)         add(7, e._mpVencidas+' MP de meses anteriores sin ejecutar', 'mp');
@@ -2689,17 +2737,28 @@ function calcularDerivadosEquipos(){
     if(!cur || (x.dias||0)>(cur.dias||0)) otPorEq[k]={etapa:etapaActualDe(x), dias:x.dias, critico:x.critico, folio:x.ot.folioSigem||'', n:(cur?cur.n:0)+1};
     else cur.n++;
   });
+  /* índice de texto correctivo por equipo: folio SIGEM, N° de envío, técnico, empresa… (búsqueda global) */
+  const corrBuscaPorEq={};
+  state.correctivos.forEach(c=>{
+    const parts=[c.folioSigem||'', c.numeroEnvio||'', c.tecnico||'', c.empresa||'', c.requerimiento||'', c.informeTecnicoNum||'', c.ordenCompraNum||''];
+    (c.avances||[]).forEach(a=>{ parts.push(a.numeroEnvio||'', a.folioRetorno||'', a.empresa||'', a.detalle||''); });
+    (corrBuscaPorEq[c.equipoKey]=corrBuscaPorEq[c.equipoKey]||[]).push(parts.filter(Boolean).join(' '));
+  });
   state.equipos.forEach(e=>{
     const info=estadoActualEquipoInfo(e.key);
     e._estado=info?info.est:'';
     e._estadoFecha=info?info.f:'';
     e._diasEstado=(info&&info.f)?String(diasEntre(info.f,hoy)):'';
     e._actualizado=ultimaActualizacionEquipo(e.key);
+    e._buscaCorr=corrBuscaPorEq[e.key]?corrBuscaPorEq[e.key].join(' '):'';
     const pend=(pendPorEq[e.key]||[]).filter(p=>p.estado!=='Completado');
     e._pendN=pend.length;
     e._pend = pend.length?('Sí ('+pend.length+')'):'No';
     e._pendVencidos=pend.filter(p=>!p.esperaDe && p.fechaCompromiso && p.fechaCompromiso<hoy).length;
     e._protoSinResolver=pend.reduce((n,p)=>n+(p.tareas||[]).filter(t=>t.opciones&&t.opciones.length&&!tareaResuelta(t)).length,0);
+    /* etapa más urgente del reporte de reprogramación entre los pendientes abiertos */
+    const reproEt=pend.map(etapaReprogramacion).filter(Boolean);
+    e._reproEtapa = reproEt.length ? reproEt.sort((a,b)=>(ORD_REPRO[a]??9)-(ORD_REPRO[b]??9))[0] : '';
     const res=resPorEq[e.key]||[]; const resMes={}; res.forEach(r=>resMes[r.mes]=r);
     e._mpMesPend = !!(e.prog&&e.prog[mesAct]) && !resMes[mesAct];
     let venc=0; for(let m=0;m<mesAct;m++){ if(e.prog&&e.prog[m] && !resMes[m]) venc++; } e._mpVencidas=venc;
@@ -3229,7 +3288,7 @@ function tablaPendientes(lista){
 }
 const PEND_COLS=[
   {k:'equipo',l:'Equipo'},{k:'serie',l:'Serie'},{k:'inventario',l:'N° Inventario'},{k:'servicio',l:'Servicio'},{k:'tipo',l:'Tipo'},
-  {k:'urgencia',l:'Urgencia'},{k:'estadoG',l:'Estado'},
+  {k:'urgencia',l:'Urgencia'},{k:'estadoG',l:'Estado'},{k:'repro',l:'Reporte reprog.'},
   {k:'compromiso',l:'Compromiso'},{k:'atraso',l:'Días atraso'},{k:'tareas',l:'Tareas'},
   {k:'respAdmin',l:'Resp. Adm'},{k:'respEjec',l:'Resp. Eje'},
   {k:'esperaDe',l:'En espera de'},{k:'ultGestion',l:'Última gestión'},{k:'completado',l:'Completado'}
@@ -3277,7 +3336,7 @@ function filasPendBase(){
     const ult=(p.gestiones&&p.gestiones.length)?p.gestiones[p.gestiones.length-1]:null;
     return { id:p.id, key:p.equipoKey, p,
       equipo:e?e.equipo:p.equipoKey, serie:e?e.serie:'', inventario:e?e.inventario:'', servicio:e?e.servicio:'', tipo:p.tipo||'',
-      urgencia:urg, estadoG:estadoGestionPendiente(p),
+      urgencia:urg, estadoG:estadoGestionPendiente(p), repro:etapaReprogramacion(p),
       compromiso:p.fechaCompromiso||'', atraso:venc?String(diasEntre(p.fechaCompromiso,hoy)):'',
       tareas:(p.tareas&&p.tareas.length)?(p.tareas.filter(tareaResuelta).length+'/'+p.tareas.length):'',
       respAdmin:p.respAdmin||'', respEjec:p.respEjec||'',
@@ -3322,12 +3381,20 @@ function renderPendientes(){
   const thead=$('#thead-pend');
   if(!thead) return;
   const m=metricasPendientes();
+  /* reportes de reprogramación abiertos: por generar / por imprimir / por firmar */
+  const reproAb=filasPendBase().filter(f=>f.repro && f.p.estado!=='Completado');
+  const rGen=reproAb.filter(f=>f.repro==='Por generar').length;
+  const rImp=reproAb.filter(f=>f.repro==='Por imprimir').length;
+  const rFir=reproAb.filter(f=>/firma/i.test(f.repro)).length;
   $('#pend-metricas').innerHTML = `
     <span class="chip azul">${m.abiertos} abierto${m.abiertos!==1?'s':''}</span>
     ${m.atrasados?`<span class="chip rojo">⚠ ${m.atrasados} atrasado${m.atrasados!==1?'s':''}</span>`:''}
     ${m.espera?`<span class="chip ambar">✋ ${m.espera} en espera</span>`:''}
     <span class="chip verde">✔ ${m.compSemana} completado${m.compSemana!==1?'s':''} esta semana</span>
-    ${m.tMedio!==null?`<span class="chip gris">⏱ resolución media: ${m.tMedio} día${m.tMedio!==1?'s':''}</span>`:''}`;
+    ${m.tMedio!==null?`<span class="chip gris">⏱ resolución media: ${m.tMedio} día${m.tMedio!==1?'s':''}</span>`:''}
+    ${rGen?`<span class="chip rojo" data-repro-filtro="Por generar" style="cursor:pointer" title="Filtrar reportes por generar">📄 ${rGen} reporte${rGen!==1?'s':''} por generar</span>`:''}
+    ${rImp?`<span class="chip ambar" data-repro-filtro="Por imprimir" style="cursor:pointer" title="Filtrar reportes por imprimir">🖨 ${rImp} por imprimir</span>`:''}
+    ${rFir?`<span class="chip ambar" data-repro-filtro="firma" style="cursor:pointer" title="Filtrar reportes que esperan firma">✍ ${rFir} por firmar</span>`:''}`;
   thead.innerHTML = PEND_COLS.map(c=>{
     const filtrado=!!filtrosPend[c.k];
     const flecha=ordenPend.k===c.k?(ordenPend.dir===1?' ▲':' ▼'):'';
@@ -3357,6 +3424,7 @@ function renderPendientes(){
         if(c.k==='equipo') return `<td style="max-width:200px"><a href="#" data-pc-eq="${esc(f.key)}" style="color:var(--azul-osc);font-weight:600">${esc(v)}</a></td>`;
         if(c.k==='urgencia') return `<td>${v==='Atrasado'?'<span class="chip rojo">Atrasado</span>':v==='Hoy'?'<span class="chip ambar">Hoy</span>':v==='En espera'?'<span class="chip ambar">✋ En espera</span>':v==='Completado'?'<span class="chip verde">Completado</span>':'<span class="chip gris">'+esc(v)+'</span>'}</td>`;
         if(c.k==='estadoG') return `<td>${v==='Completado'?'<span class="chip verde">Completado</span>':v==='En espera'?'<span class="chip ambar">En espera</span>':v==='En gestión'?'<span class="chip azul">En gestión</span>':'<span class="chip gris">Nuevo</span>'}</td>`;
+        if(c.k==='repro') return `<td>${v?`<span class="chip ${ETAPA_REPRO_CLASE[v]||'gris'}">${esc(v)}</span>`:'—'}</td>`;
         if(c.k==='compromiso'||c.k==='completado') v=v?fmtFecha(v):'';
         if(c.k==='ultGestion') return `<td style="max-width:260px" title="${esc(v)}">${esc(v.length>80?v.slice(0,80)+'…':v)||'—'}</td>`;
         return `<td title="${esc(v)}">${esc(v)||'—'}</td>`;
@@ -3435,7 +3503,7 @@ function exportarPendientesVista(){
    VISTA CORRECTIVOS — una fila por expediente, tabla tipo Excel
    ===================================================================== */
 const CORR_COLS=[
-  {k:'id',l:'ID'},{k:'equipo',l:'Equipo'},{k:'tipo',l:'Tipo'},{k:'folio',l:'Folio SIGEM'},
+  {k:'id',l:'ID'},{k:'equipo',l:'Equipo'},{k:'tipo',l:'Tipo'},{k:'folio',l:'Folio SIGEM'},{k:'envio',l:'N° Envío'},
   {k:'fechaDoc',l:'Fecha Doc.'},{k:'tecnico',l:'Técnico'},{k:'empresa',l:'Empresa'},
   {k:'estado',l:'Estado'},{k:'diasCiclo',l:'Días ciclo'}
 ];
@@ -3453,23 +3521,36 @@ function filasCorrBase(){
     const diasCiclo = ape ? diasEntre(ape, cierre||hoy) : 0;
     let empresa=x.ot.empresa||'';
     (x.ot.avances||[]).forEach(a=>{ if(a.empresa) empresa=a.empresa; });
-    state.correctivos.filter(c=>c!==x.ot && (c.folioSigem||'').trim()===(x.folio||'').trim() && c.empresa).forEach(c=>{ empresa=c.empresa||empresa; });
+    const folio=(x.folio||'').trim();
+    state.correctivos.filter(c=>c!==x.ot && (c.folioSigem||'').trim()===folio && c.empresa).forEach(c=>{ empresa=c.empresa||empresa; });
+    /* N° de envío del expediente: de los avances de envío, del propio evento y de eventos hermanos del mismo folio */
+    const enviosNum=[
+      ...(x.ot.avances||[]).filter(a=>a.tipo==='Envío a Servicio Técnico').map(a=>a.numeroEnvio),
+      ...(x.ot.numeroEnvio?[x.ot.numeroEnvio]:[]),
+      ...state.correctivos.filter(c=>c!==x.ot && (c.folioSigem||'').trim()===folio && c.numeroEnvio).map(c=>c.numeroEnvio)
+    ].filter(Boolean);
+    const retornos=(x.ot.avances||[]).filter(a=>a.tipo==='Retorno de Servicio Técnico').map(a=>a.folioRetorno).filter(Boolean);
     return {
       idExp:x.ot.id, key:x.ot.equipoKey, x,
       id:String(idMap.get(x.ot.id)||0).padStart(3,'0'),
       equipo:e?e.equipo:x.ot.equipoKey, serie:e?(e.serie||''):'', inventario:e?(e.inventario||''):'',
       tipo:tipoEventoDe(x.ot),
-      folio:(x.folio||'').startsWith('·sin-folio·')?'(sin folio)':(x.folio||''),
+      folio:folio.startsWith('·sin-folio·')?'(sin folio)':(x.folio||''),
       fechaDoc:ape, tecnico:x.ot.tecnico||'', empresa,
+      envio: enviosNum.join(', '),
       estado: x.cerrado?'Cerrado':etapaActualDe(x),
-      diasCiclo:String(diasCiclo), _diasNum:diasCiclo, _cerrado:x.cerrado, _critico:x.critico
+      diasCiclo:String(diasCiclo), _diasNum:diasCiclo, _cerrado:x.cerrado, _critico:x.critico,
+      _buscar:[ x.ot.requerimiento||'', x.ot.informeTecnicoNum||'', x.ot.ordenCompraNum||'',
+        ...enviosNum, ...enviosNum.map(n=>'envío '+n), ...retornos, ...retornos.map(n=>'retorno '+n),
+        ...((x.ot.avances||[]).map(a=>a.detalle||'')) ].filter(Boolean).join(' ')
     };
   });
 }
 function pasaBusquedaCorr(f){
   if(!busquedaCorr) return true;
   const b=sinAcentos(busquedaCorr).toLowerCase();
-  return CORR_COLS.concat([{k:'serie'},{k:'inventario'}]).some(c=>sinAcentos(f[c.k]||'').toLowerCase().includes(b));
+  return sinAcentos(f._buscar||'').toLowerCase().includes(b) ||
+    CORR_COLS.concat([{k:'serie'},{k:'inventario'},{k:'envio'}]).some(c=>sinAcentos(f[c.k]||'').toLowerCase().includes(b));
 }
 function filasCorrFiltradas(excluir){
   return filasCorrBase().filter(f=>
@@ -4041,12 +4122,11 @@ function conectarEventos(){
 
   /* Modal Pendiente */
   $$('#modal-pend .atajos button').forEach(b=>b.addEventListener('click',()=>{ $('#pe-fecha').value=sumarDias(hoyISO(),+b.dataset.dias); }));
-  /* al elegir un tipo de protocolo se arma la lista de tareas (Sí/No/Imprimir/Gestión) */
+  /* al elegir el tipo se arma su checklist: protocolo (Sí/No/Imprimir/Gestión) o reprogramación (generar→imprimir→2 firmas) */
   $('#pe-tipo').addEventListener('change',ev=>{
     const tm=TIPO_PEND_PROTOCOLO[ev.target.value];
-    if(!tm) return;
-    const n=asegurarProtocoloEnTareas(tm);
-    if(n){ renderPeTareas(); toast('➕ Lista de protocolo '+tm.toLowerCase()+' agregada ('+n+' tarea'+(n>1?'s':'')+').'); }
+    if(tm){ const n=asegurarProtocoloEnTareas(tm); if(n){ renderPeTareas(); toast('➕ Lista de protocolo '+tm.toLowerCase()+' agregada ('+n+' tarea'+(n>1?'s':'')+').'); } return; }
+    if(ev.target.value===TIPO_PEND_REPROG){ const n=asegurarReprogEnTareas(); if(n){ renderPeTareas(); toast('➕ Ciclo del reporte de reprogramación agregado (generar, imprimir y 2 firmas).'); } }
   });
   $('#pe-tarea-add').addEventListener('click',agregarTarea);
   $('#pe-tarea-nueva').addEventListener('keydown',ev=>{ if(ev.key==='Enter'){ev.preventDefault();agregarTarea();} });
@@ -4094,6 +4174,13 @@ function conectarEventos(){
   /* Bandeja de pendientes (tabla tipo Excel) */
   $('#busqueda-pend').addEventListener('input', debounce(()=>{ busquedaPend=$('#busqueda-pend').value; renderPendientes(); },180));
   $('#btn-limpiar-pend').addEventListener('click',()=>{ filtrosPend={}; ordenPend={k:null,dir:1}; busquedaPend=''; $('#busqueda-pend').value=''; renderPendientes(); });
+  /* chips de acceso rápido a los reportes de reprogramación (por generar / imprimir / firmar) */
+  $('#pend-metricas').addEventListener('click',ev=>{
+    const ch=ev.target.closest('[data-repro-filtro]'); if(!ch) return;
+    const f=ch.dataset.reproFiltro;
+    const vals = f==='firma' ? ['Faltan 2 firmas','Falta firma del supervisor','Falta firma del jefe'] : [f];
+    filtrosPend.repro = new Set(vals); ordenPend={k:null,dir:1}; renderPendientes();
+  });
   $('#btn-exportar-pend').addEventListener('click',exportarPendientesVista);
   $('#thead-pend').addEventListener('click',ev=>{
     const b=ev.target.closest('.btn-filtro');
