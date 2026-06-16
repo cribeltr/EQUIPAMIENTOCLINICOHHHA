@@ -53,6 +53,8 @@ index.html                                Aplicación (usa js/xlsx.full.min.js)
 SistemaGestionMP2026.html                 Versión autónoma en un solo archivo (recomendada para distribuir)
 js/xlsx.full.min.js                       Librería SheetJS 0.18.5 (lectura/escritura de .xlsx)
 docs/Flujo_Sistema_Gestion_MP_2026.docx   Especificación técnica vigente del flujo de la app
+GRABACIONES.md                            Bitácora de hallazgos de las grabaciones de sesión
+grabaciones/                              Grabaciones de sesión archivadas (telemetría local entregada)
 ```
 
 ## Notas

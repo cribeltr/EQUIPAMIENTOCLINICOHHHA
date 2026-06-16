@@ -127,6 +127,17 @@ table.equipos tbody tr:hover td{background:var(--azul-claro)}
 .det-cab{display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap}
 .det-cab h2{font-size:1.25rem}
 .det-acciones{margin-left:auto;display:flex;gap:10px;flex-wrap:wrap}
+.inicio-hoy{background:var(--azul-claro);border-radius:9px;padding:11px 15px;font-size:.95rem;color:var(--tinta)}
+.inicio-cards{display:flex;flex-wrap:wrap;gap:11px}
+.inicio-card{display:flex;align-items:center;gap:13px;border:1px solid var(--gris-2);border-left:5px solid var(--gris-3);border-radius:11px;padding:13px 17px;background:#fff;cursor:pointer;text-align:left;min-width:235px;transition:box-shadow .12s}
+.inicio-card:hover{box-shadow:var(--sombra)}
+.inicio-card .ic-n{font-size:1.75rem;font-weight:800;line-height:1}
+.inicio-card .ic-t{font-size:.9rem;color:var(--gris-4)}
+.inicio-card.rojo{border-left-color:var(--rojo)} .inicio-card.rojo .ic-n{color:var(--rojo)}
+.inicio-card.ambar{border-left-color:var(--ambar)} .inicio-card.ambar .ic-n{color:var(--ambar)}
+.inicio-card.azul{border-left-color:var(--azul)} .inicio-card.azul .ic-n{color:var(--azul)}
+.inicio-card.verde{border-left-color:var(--verde)} .inicio-card.verde .ic-n{color:var(--verde)}
+.inicio-card.morado{border-left-color:var(--morado)} .inicio-card.morado .ic-n{color:var(--morado)}
 .det-banner{display:flex;flex-wrap:wrap;align-items:center;gap:9px 18px;margin:12px 0 2px;padding:11px 14px;border:1px solid var(--gris-2);border-left:5px solid var(--gris-3);border-radius:9px;background:var(--gris-1)}
 .det-banner.rojo{border-left-color:var(--rojo);background:var(--rojo-bg)}
 .det-banner.ambar{border-left-color:var(--ambar);background:var(--ambar-bg)}
@@ -295,6 +306,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
     </div>
   </div>
   <nav id="nav-principal">
+    <button data-vista="inicio">🏠 Inicio</button>
     <button data-vista="carga">📂 Carga de Datos</button>
     <button data-vista="equipos">🛠 Equipos <span class="nbadge" id="badge-equipos" style="display:none"></span></button>
     <button data-vista="plan">📅 Plan de Mantenimiento</button>
@@ -307,6 +319,15 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
 </header>
 
 <main>
+
+<!-- ============ VISTA: INICIO (tablero del día) ============ -->
+<section class="vista" id="vista-inicio">
+  <div class="card">
+    <h2>🏠 Inicio · ¿qué hago hoy?</h2>
+    <p class="sub">Resumen accionable del día. Presiona una tarjeta para ir a lo que requiere atención, o un equipo crítico para abrir su ficha.</p>
+    <div id="inicio-cont"></div>
+  </div>
+</section>
 
 <!-- ============ VISTA: CARGA ============ -->
 <section class="vista" id="vista-carga">
@@ -923,7 +944,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-16.39';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-16.40';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -1383,6 +1404,7 @@ function mostrarVista(id){
   $('#vista-'+id).classList.add('activa');
   $$('#nav-principal button').forEach(b=>b.classList.toggle('activa', b.dataset.vista===id));
   cerrarPopover();
+  if(id==='inicio') renderInicio();
   if(id==='equipos') renderTabla();
   if(id==='plan') renderPlan();
   if(id==='correctivos') renderCorrectivos();
@@ -1392,8 +1414,52 @@ function mostrarVista(id){
 }
 function renderTodo(){
   calcularDerivadosEquipos(); invalidar(); invalidarPlan();
-  renderResumen(); renderTabla(); renderPlan(); renderPendientes(); renderCorrectivos(); renderOperatividad(); renderBadges();
+  renderInicio(); renderResumen(); renderTabla(); renderPlan(); renderPendientes(); renderCorrectivos(); renderOperatividad(); renderBadges();
   if(detalleKey) renderDetalle(detalleKey);
+}
+/* ---------- Tablero de Inicio: «¿qué hago hoy?» ---------- */
+function renderInicio(){
+  const cont=$('#inicio-cont'); if(!cont) return;
+  if(!state.equipos.length){ cont.innerHTML='<div class="vacio">Carga la planilla en «Carga de Datos» para ver tu resumen del día.</div>'; return; }
+  const eq=state.equipos, hoy=hoyISO();
+  const detenidos=eq.filter(e=>e._estado==='No Operativo'||e._estado==='Servicio Técnico').length;
+  const otAb=eq.filter(e=>e._otAbierta).length;
+  const mpMes=eq.filter(e=>e._mpMesPend).length;
+  const fsNu=eq.filter(e=>e._fsNu).length;
+  const m=metricasPendientes();
+  const reproAb=filasPendBase().filter(f=>f.repro && f.p.estado!=='Completado');
+  const rGen=reproAb.filter(f=>f.repro==='Por generar').length;
+  const rFir=reproAb.filter(f=>/firma/i.test(f.repro)).length;
+  const rOfi=reproAb.filter(f=>f.repro==='Firmado').length;
+  const rCer=reproAb.filter(f=>f.repro==='Oficializado').length;
+  const card=(clase,ico,n,txt,attrs)=> n>0 ? `<button class="inicio-card ${clase}" ${attrs||''}><span class="ic-n">${n}</span><span class="ic-t">${ico} ${txt}</span></button>` : '';
+  const cards=[
+    card('rojo','🔴',detenidos,'equipo'+(detenidos!==1?'s':'')+' detenido'+(detenidos!==1?'s':'')+' (No Operativo / ST)','data-ir="operatividad"'),
+    card('rojo','📂',otAb,'OT abierta'+(otAb!==1?'s':'')+' por avanzar','data-ir="correctivos"'),
+    card('rojo','📄',rGen,'reporte'+(rGen!==1?'s':'')+' de reprogramación por generar','data-ir="pendientes" data-repro="Por generar"'),
+    card('ambar','✍',rFir,'reporte'+(rFir!==1?'s':'')+' por firmar','data-ir="pendientes" data-repro="firma"'),
+    card('azul','📤',rOfi,'firmado'+(rOfi!==1?'s':'')+' por oficializar','data-ir="pendientes" data-repro="Firmado"'),
+    card('verde','✅',rCer,'oficializado'+(rCer!==1?'s':'')+' por cerrar','data-ir="pendientes" data-repro="Oficializado"'),
+    card('ambar','⚠',m.atrasados,'pendiente'+(m.atrasados!==1?'s':'')+' vencido'+(m.atrasados!==1?'s':''),'data-ir="pendientes"'),
+    card('azul','🔧',mpMes,'MP de '+MESES[new Date().getMonth()]+' sin ejecutar','data-ir="equipos"'),
+    card('morado','📋',fsNu,'FS/NU en planilla sin resolver','data-ir="operatividad"')
+  ].filter(Boolean).join('');
+  const top=tableroOperatividad().slice(0,8);
+  const topHtml = top.length
+    ? `<div style="overflow:auto"><table class="lista"><tr><th>Equipo</th><th>Último estado</th><th>Siguiente acción</th><th>Días</th></tr>`
+      + top.map(it=>{ const e=it.equipo; return `<tr class="click" data-oper-eq="${esc(it.equipoKey)}">
+        <td><strong>${esc(e?e.equipo:it.equipoKey)}</strong><br><small style="color:var(--gris-4)">${esc(e?('Inv. '+(e.inventario||'')+' · '+(e.servicio||'')):'')}</small></td>
+        <td>${chipEstadoEq(it.estado)}</td>
+        <td style="max-width:320px">${it.sig?`<span class="chip ${SIG_CLASE[it.sig.tipo]||'gris'}">${esc(it.sig.texto)}</span>`:'—'}</td>
+        <td>${it.dias?('<strong style="'+(it.estado==='No Operativo'?'color:var(--rojo)':'')+'">'+it.dias+' d</strong>'):'—'}</td></tr>`; }).join('')
+      + `</table></div>`
+    : '<div class="vacio">✅ Sin equipos en atención hoy.</div>';
+  cont.innerHTML = `
+    <div class="inicio-hoy">📆 Hoy es <strong>${fmtFecha(hoy)}</strong> · ${detenidos?('<strong style="color:var(--rojo)">'+detenidos+' equipo'+(detenidos!==1?'s':'')+' detenido'+(detenidos!==1?'s':'')+'</strong>'):'sin equipos detenidos'} · ${m.abiertos} pendiente${m.abiertos!==1?'s':''} abierto${m.abiertos!==1?'s':''}${m.atrasados?(' ('+m.atrasados+' vencido'+(m.atrasados!==1?'s':'')+')'):''}.</div>
+    <h3 style="margin:16px 0 8px">Lo que requiere acción</h3>
+    <div class="inicio-cards">${cards||'<div class="vacio">✅ Todo al día: nada urgente por ahora.</div>'}</div>
+    <h3 style="margin:20px 0 8px">Equipos más críticos · acceso directo a la ficha</h3>
+    ${topHtml}`;
 }
 function renderBadges(){
   const bE=$('#badge-equipos');
@@ -4074,6 +4140,21 @@ function conectarEventos(){
   /* Navegación */
   $$('#nav-principal button[data-vista]').forEach(b=>b.addEventListener('click',()=>mostrarVista(b.dataset.vista)));
 
+  /* Tablero de Inicio: tarjetas y equipos críticos llevan a la vista correspondiente */
+  $('#inicio-cont').addEventListener('click',ev=>{
+    const oper=ev.target.closest('tr[data-oper-eq]');
+    if(oper){ abrirDetalle(oper.dataset.operEq); return; }
+    const card=ev.target.closest('[data-ir]');
+    if(card){
+      if(card.dataset.repro){
+        const f=card.dataset.repro;
+        const vals=f==='firma'?['Faltan 2 firmas','Falta firma del supervisor','Falta firma del jefe']:[f];
+        filtrosPend={repro:new Set(vals)}; ordenPend={k:'servicio',dir:1}; busquedaPend=''; if($('#busqueda-pend')) $('#busqueda-pend').value='';
+      }
+      mostrarVista(card.dataset.ir);
+    }
+  });
+
   /* Grabación de sesión */
   $('#btn-grabar').addEventListener('click',()=>grab?detenerGrabacion():iniciarGrabacion());
 
@@ -4456,7 +4537,7 @@ function conectarEventos(){
   cargarPrefs();
   cargarLocal();
   renderTodo();
-  mostrarVista(state.equipos.length ? 'equipos' : 'carga');
+  mostrarVista(state.equipos.length ? 'inicio' : 'carga');
   setTimeout(()=>{
     const m=metricasPendientes();
     if(m.atrasados>0) toast('⚠ '+m.atrasados+' pendiente'+(m.atrasados>1?'s':'')+' atrasado'+(m.atrasados>1?'s':'')+' — revisa la pestaña Pendientes.');

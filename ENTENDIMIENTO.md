@@ -8,7 +8,7 @@
 > *Está escrito en primera persona, tal como lo expliqué, para poder leerlo y confirmar que se
 > entendió todo. Si algo no calza con la realidad, se corrige aquí primero.*
 
-_Última actualización: 2026-06-16 · App build 2026-06-16.39_
+_Última actualización: 2026-06-16 · App build 2026-06-16.40_
 
 ---
 
@@ -183,6 +183,8 @@ estado actual.
 | 2026‑06‑16 | El respaldo no guarda columnas derivadas (se recalculan) | Respaldos más livianos para traspasar/guardar |
 | 2026‑06‑16 | **Bitácora del equipo** en la ficha: una fila por evento con su fecha y estado (MP, reprogramaciones, OT, envíos, retornos, cierres, pendientes) en orden cronológico | Ver de un vistazo *qué ocurrió y cuándo* con cada equipo, sin reconstruirlo a mano |
 | 2026‑06‑16 | Un **pendiente nuevo** parte **limpio** (tipo «Otro», sin checklist); el checklist aparece solo al **elegir** un tipo de protocolo/reprogramación | No quiero que se arme una lista por defecto en cualquier pendiente que creo |
+| 2026‑06‑16 | **Archivo de grabaciones** en el repo (`grabaciones/`) + `GRABACIONES.md` con qué reveló cada una | Que el repositorio guarde las grabaciones y para qué sirvieron (entendimiento acumulativo) |
+| 2026‑06‑16 | **Tablero de Inicio «¿qué hago hoy?»**: la app abre con el resumen accionable del día (equipos detenidos, OT por avanzar, reprogramaciones por etapa, MP del mes, pendientes vencidos) y los equipos más críticos; cada tarjeta lleva a su vista | Empezar el día sabiendo de inmediato qué tengo que hacer, sin armarlo a mano |
 
 ---
 
