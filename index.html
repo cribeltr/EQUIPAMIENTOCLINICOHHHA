@@ -944,7 +944,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-16.41';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-16.42';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -2383,7 +2383,7 @@ function renderDetalle(key){
       m&&m.gestionPendiente?'<span class="chip ambar">Gestión pendiente</span>':'',
       m&&m.estadoEquipo==='No Operativo'?'<span class="chip rojo">Equipo No Operativo</span>':''
     ].filter(Boolean).join('<br>');
-    return `<tr>
+    return `<tr ${m?`class="click" data-row-mp="${m.id}" title="Editar esta mantención"`:''}>
       <td><strong>${mesTxt}</strong></td>
       <td>${m?fmtFecha(m.fecha):'—'}</td>
       <td>${chipPrograma(programa)||'—'}</td>
@@ -2435,7 +2435,7 @@ function renderDetalle(key){
       const evento = estadoEventoDe(c)==='Cerrado'
         ? `<span class="chip verde">Cerrado</span>${c.fechaCierre?'<br><small style="color:var(--gris-4)">'+fmtFecha(c.fechaCierre)+'</small>':''}`
         : '<span class="chip azul">Abierto</span>';
-      return `<tr>
+      return `<tr class="click" data-row-ot="${c.id}" title="Editar este evento">
       <td><strong>${esc(tipoEventoDe(c))}</strong></td>
       <td>${fmtFecha(c.fechaDocumento)}</td>
       <td>${esc(c.folioSigem)||'—'}</td>
@@ -4309,7 +4309,12 @@ function conectarEventos(){
       return;
     }
     const tp=ev.target.closest('tr[data-pendiente]');
-    if(tp){ const p=state.pendientes.find(x=>x.id===tp.dataset.pendiente); if(p) abrirModalPendiente(p.equipoKey,p,null); }
+    if(tp){ const p=state.pendientes.find(x=>x.id===tp.dataset.pendiente); if(p) abrirModalPendiente(p.equipoKey,p,null); return; }
+    /* fila del Historial → editar la mantención; fila del detalle de Correctivo → editar el evento */
+    const rm=ev.target.closest('tr[data-row-mp]');
+    if(rm){ const m=state.manuales.find(x=>x.id===rm.dataset.rowMp); if(m) abrirModalMP(m.equipoKey,m); return; }
+    const ro=ev.target.closest('tr[data-row-ot]');
+    if(ro){ const c=state.correctivos.find(x=>x.id===ro.dataset.rowOt); if(c) abrirModalOT(c.equipoKey,c); return; }
   });
 
   /* Modal Mantenimiento Correctivo (Paso 10) */
