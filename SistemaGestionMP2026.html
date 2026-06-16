@@ -968,7 +968,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-16.40';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-16.41';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -2292,7 +2292,8 @@ function abrirDetalle(key){ const v=vistaActiva(); if(v && v!=='detalle') detall
    pendientes), una entrada por evento, ordenadas por fecha. */
 function bitacoraEquipo(key){
   const ev=[];
-  const add=(f,txt,label,clase)=>{ if(f) ev.push({f, txt, label:label||'', clase:clase||'gris'}); };
+  /* cada entrada lleva una referencia a su origen para que la fila sea clickeable (ref:{t,id}) */
+  const add=(f,txt,label,clase,ref)=>{ if(f) ev.push({f, txt, label:label||'', clase:clase||'gris', ref:ref||null}); };
   /* 1) Mantenciones preventivas / reprogramaciones (registradas en la app) */
   state.manuales.filter(m=>m.equipoKey===key).forEach(m=>{
     if(/^C[1-8]$/.test(m.resultado||'')){
@@ -2303,21 +2304,22 @@ function bitacoraEquipo(key){
       if(pend && pend.estado!=='Completado'){ const et=etapaReprogramacion(pend); label=et||'Pendiente'; clase=ETAPA_REPRO_CLASE[et]||'ambar'; }
       else if(ofi){ label='Oficial'; clase='verde'; }
       else { label='Pendiente'; clase='ambar'; }   /* causal sin oficializar = reprogramación pendiente */
-      add(m.fecha, 'Reprogramación — causal '+m.resultado+(m.ejecutor?' · '+m.ejecutor:''), label, clase);
+      /* la reprogramación lleva a su pendiente (donde se trabaja el reporte) si existe; si no, a la MP */
+      add(m.fecha, 'Reprogramación — causal '+m.resultado+(m.ejecutor?' · '+m.ejecutor:''), label, clase, pend?{t:'pend',id:pend.id}:{t:'mp',id:m.id});
     } else {
       const r=m.resultado||'';
       const txt = (r==='Si'||r==='Si-RA') ? 'Mantención preventiva realizada'
                 : r==='FS' ? 'Mantención preventiva — Fuera de Servicio'
                 : r ? 'Mantención preventiva — '+(RESULTADOS[r]||r) : 'Mantención preventiva';
-      add(m.fecha, txt+(m.estadoEquipo?' · equipo '+m.estadoEquipo:'')+(m.ejecutor?' · '+m.ejecutor:''), m.tipoRegistro||'Borrador', (m.tipoRegistro==='Oficial')?'verde':'ambar');
+      add(m.fecha, txt+(m.estadoEquipo?' · equipo '+m.estadoEquipo:'')+(m.ejecutor?' · '+m.ejecutor:''), m.tipoRegistro||'Borrador', (m.tipoRegistro==='Oficial')?'verde':'ambar', {t:'mp',id:m.id});
     }
   });
   /* 2) Mantenimiento correctivo: apertura del evento, hitos del expediente y avances */
   state.correctivos.filter(c=>c.equipoKey===key).forEach(c=>{
-    const cerr=estadoEventoDe(c)==='Cerrado';
-    add(c.fechaDocumento, tipoEventoDe(c)+(c.folioSigem?' — folio '+c.folioSigem:'')+(c.requerimiento?' · '+c.requerimiento:''), cerr?'Cerrado':'Abierto', cerr?'verde':'azul');
-    if(c.informeTecnicoFecha) add(c.informeTecnicoFecha, 'Informe técnico'+(c.informeTecnicoNum?' N° '+c.informeTecnicoNum:''), 'Expediente', 'gris');
-    if(c.ordenCompraFecha) add(c.ordenCompraFecha, 'Orden de compra emitida'+(c.ordenCompraNum?' N° '+c.ordenCompraNum:''), 'Expediente', 'gris');
+    const cerr=estadoEventoDe(c)==='Cerrado', refOT={t:'ot',id:c.id};
+    add(c.fechaDocumento, tipoEventoDe(c)+(c.folioSigem?' — folio '+c.folioSigem:'')+(c.requerimiento?' · '+c.requerimiento:''), cerr?'Cerrado':'Abierto', cerr?'verde':'azul', refOT);
+    if(c.informeTecnicoFecha) add(c.informeTecnicoFecha, 'Informe técnico'+(c.informeTecnicoNum?' N° '+c.informeTecnicoNum:''), 'Expediente', 'gris', refOT);
+    if(c.ordenCompraFecha) add(c.ordenCompraFecha, 'Orden de compra emitida'+(c.ordenCompraNum?' N° '+c.ordenCompraNum:''), 'Expediente', 'gris', refOT);
     (c.avances||[]).forEach(a=>{
       if(a.tipo==='Cierre del expediente') return;   /* lo cubre la fila de cierre, sin duplicar */
       let t=a.tipo||'Avance';
@@ -2325,18 +2327,18 @@ function bitacoraEquipo(key){
       else if(a.tipo==='Retorno de Servicio Técnico') t='Retorno de Servicio Técnico'+(a.folioRetorno?' · folio '+a.folioRetorno:'')+(a.empresa?' de '+a.empresa:'')+(a.estadoEquipoRetorno?' · equipo '+a.estadoEquipoRetorno:'');
       else if(a.tipo==='Visita / Ejecución realizada') t='Visita / ejecución'+(a.estadoEquipoVisita?' · equipo '+a.estadoEquipoVisita:'');
       else if(a.detalle) t=a.tipo+' · '+a.detalle;
-      add(a.fecha, t, 'Avance', 'gris');
+      add(a.fecha, t, 'Avance', 'gris', refOT);
     });
     if(c.fechaCierre){
       const cav=(c.avances||[]).find(a=>a.tipo==='Cierre del expediente' && a.detalle);
       const det = c.estadoEquipoCierre ? ' · equipo '+c.estadoEquipoCierre : (cav&&cav.detalle?' · '+cav.detalle:'');
-      add(c.fechaCierre, 'Cierre del expediente'+det, 'Cerrado', 'verde');
+      add(c.fechaCierre, 'Cierre del expediente'+det, 'Cerrado', 'verde', refOT);
     }
   });
   /* 3) Pendientes creados a mano (los de origenMP ya aparecen en su mantención) y su cierre */
   state.pendientes.filter(p=>p.equipoKey===key).forEach(p=>{
-    if(!p.origenMP) add(p.creado, 'Pendiente — '+(p.tipo||'gestión'), estadoGestionPendiente(p), p.estado==='Completado'?'verde':'ambar');
-    if(p.estado==='Completado' && p.fechaCompletado) add(p.fechaCompletado, 'Pendiente completado — '+(p.tipo||''), 'Completado', 'verde');
+    if(!p.origenMP) add(p.creado, 'Pendiente — '+(p.tipo||'gestión'), estadoGestionPendiente(p), p.estado==='Completado'?'verde':'ambar', {t:'pend',id:p.id});
+    if(p.estado==='Completado' && p.fechaCompletado) add(p.fechaCompletado, 'Pendiente completado — '+(p.tipo||''), 'Completado', 'verde', {t:'pend',id:p.id});
   });
   ev.sort((a,b)=>(a.f||'').localeCompare(b.f||''));
   return ev;
@@ -2432,7 +2434,7 @@ function renderDetalle(key){
   const bit = bitacoraEquipo(key);
   $('#det-bitacora').innerHTML = bit.length
     ? `<div style="overflow:auto"><table class="lista"><tr><th style="width:108px">Fecha</th><th>Qué ocurrió</th><th style="width:150px">Estado</th></tr>`
-      + bit.map(x=>`<tr><td><strong>${fmtFecha(x.f)}</strong></td><td>${esc(x.txt)}</td><td><span class="chip ${x.clase}">${esc(x.label)}</span></td></tr>`).join('')
+      + bit.map(x=>`<tr ${x.ref?`class="click" data-bit="${x.ref.t}|${esc(x.ref.id)}" title="Abrir este evento"`:''}><td><strong>${fmtFecha(x.f)}</strong></td><td>${esc(x.txt)}</td><td><span class="chip ${x.clase}">${esc(x.label)}</span></td></tr>`).join('')
       + `</table></div>`
     : '<div class="vacio">Sin eventos con fecha registrados para este equipo.</div>';
 
@@ -4282,6 +4284,14 @@ function conectarEventos(){
 
   /* Detalle */
   $('#btn-volver-detalle').addEventListener('click',()=>mostrarVista(detalleOrigen||'equipos'));
+  /* Bitácora: cada fila lleva a su evento de origen (reprogramación/pendiente, MP o expediente) */
+  $('#det-bitacora').addEventListener('click',ev=>{
+    const tr=ev.target.closest('tr[data-bit]'); if(!tr) return;
+    const [t,id]=tr.dataset.bit.split('|');
+    if(t==='mp'){ const m=state.manuales.find(x=>x.id===id); if(m) abrirModalMP(m.equipoKey,m); }
+    else if(t==='pend'){ const p=state.pendientes.find(x=>x.id===id); if(p) abrirModalPendiente(p.equipoKey,p,null); }
+    else if(t==='ot'){ const c=state.correctivos.find(x=>x.id===id); if(c) abrirModalOT(c.equipoKey,c); }
+  });
   $('#btn-abrir-mp').addEventListener('click',()=>abrirModalMP(detalleKey,null));
   $('#btn-abrir-pendiente').addEventListener('click',()=>abrirModalPendiente(detalleKey,null,null));
   $('#btn-abrir-ot').addEventListener('click',()=>abrirModalOT(detalleKey,null));
