@@ -46,12 +46,13 @@ En la pestaña **Carga de Datos** (sección «Descargas y respaldo», también a
 ## Estructura del repositorio
 
 ```
+CLAUDE.md                                 Guía para Claude Code: reglas/invariantes, arquitectura y cómo trabajar
+ENTENDIMIENTO.md                          Documento vivo: el proceso real y el porqué de cada ajuste (.md y .docx)
+ENTENDIMIENTO.docx                        Misma información en Word, para leer y validar el entendimiento
 index.html                                Aplicación (usa js/xlsx.full.min.js)
 SistemaGestionMP2026.html                 Versión autónoma en un solo archivo (recomendada para distribuir)
 js/xlsx.full.min.js                       Librería SheetJS 0.18.5 (lectura/escritura de .xlsx)
 docs/Flujo_Sistema_Gestion_MP_2026.docx   Especificación técnica vigente del flujo de la app
-docs/Entendimiento_del_Proceso.md         Documento vivo: el proceso real y el porqué de cada ajuste (.md y .docx)
-docs/Entendimiento_del_Proceso.docx       Misma información en Word, para leer y validar el entendimiento
 ```
 
 ## Notas
