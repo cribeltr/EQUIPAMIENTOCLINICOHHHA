@@ -463,7 +463,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
 <!-- ============ VISTA: DETALLE ============ -->
 <section class="vista" id="vista-detalle">
   <div class="card">
-    <button class="btn mini" onclick="mostrarVista('equipos')">← Volver a equipos</button>
+    <button class="btn mini" id="btn-volver-detalle">← Volver</button>
     <div class="det-cab" style="margin-top:12px">
       <div>
         <h2 id="det-titulo"></h2>
@@ -941,7 +941,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-16.34';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-16.35';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -1121,6 +1121,8 @@ let busqueda = '';
 let pagina = 0;
 let filtroPend = 'abiertos';
 let detalleKey = null;                  // equipo abierto en la vista de detalle
+let detalleOrigen = 'equipos';          // vista desde la que se abrió el detalle (para «← Volver»)
+const NOMBRE_VISTA = {equipos:'Equipos', pendientes:'Pendientes', operatividad:'Operatividad', correctivos:'Correctivos', plan:'Plan', carga:'Carga de Datos'};
 let cacheFiltradas = null;
 
 /* ---------- Utilidades ---------- */
@@ -2196,11 +2198,12 @@ async function restaurarRespaldo(file){
    PASO 7 — VISTA DE DETALLE DEL EQUIPO
    ===================================================================== */
 function equipoPorKey(k){ return state.equipos.find(e=>e.key===k); }
-function abrirDetalle(key){ detalleKey=key; renderDetalle(key); mostrarVista('detalle'); }
+function abrirDetalle(key){ const v=vistaActiva(); if(v && v!=='detalle') detalleOrigen=v; detalleKey=key; renderDetalle(key); mostrarVista('detalle'); }
 
 function renderDetalle(key){
   const e=equipoPorKey(key);
   if(!e){ mostrarVista('equipos'); return; }
+  const bv=$('#btn-volver-detalle'); if(bv) bv.textContent='← Volver a '+(NOMBRE_VISTA[detalleOrigen]||'Equipos');
   $('#det-titulo').textContent = e.equipo || '(Equipo sin nombre)';
   const manualesEq = state.manuales.filter(m=>m.equipoKey===key).sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
   const otsEq = state.correctivos.filter(c=>c.equipoKey===key).sort((a,b)=>(b.fechaDocumento||'').localeCompare(a.fechaDocumento||''));
@@ -2444,8 +2447,8 @@ function guardarMP(){
 }
 function generarPendienteDesdeMP(m){
   const esCausal=/^C[1-8]$/.test(m.resultado);
-  const REPRO30=['C1','C5','C6','C7','C8'];
-  const compromiso = REPRO30.includes(m.resultado) ? sumarDias(m.fecha,30) : sumarDias(hoyISO(),7);
+  /* fecha de compromiso = la del evento que la origina (la mantención / reprogramación) */
+  const compromiso = m.fecha || hoyISO();
   const tipoMant = m.tipoMantenimiento||'Interno';
   /* Causal → ciclo del reporte de reprogramación (con su causal y fecha); si no, protocolo */
   const tareas = esCausal ? tareasReprogramacion(m.resultado, m.fecha) : tareasProtocolo(tipoMant);
@@ -3347,18 +3350,17 @@ function tablaPendientes(lista){
     ${filas}</table></div>`;
 }
 const PEND_COLS=[
-  {k:'equipo',l:'Equipo'},{k:'serie',l:'Serie'},{k:'inventario',l:'N° Inventario'},{k:'servicio',l:'Servicio'},
-  {k:'eqId',l:'ID equipo'},{k:'carpeta',l:'N° Carpeta'},{k:'unidad',l:'Unidad'},{k:'ubicacion',l:'Ubicación'},
-  {k:'procedencia',l:'Procedencia'},{k:'marca',l:'Marca'},{k:'modelo',l:'Modelo'},
-  {k:'anio',l:'Año Instalación'},{k:'vidaUtil',l:'Vida Útil Residual'},{k:'clasificacion',l:'Clasificación'},{k:'enu',l:'ENU / Baja'},
-  {k:'tipo',l:'Tipo'},
-  {k:'urgencia',l:'Urgencia'},{k:'estadoG',l:'Estado'},{k:'repro',l:'Reporte reprog.'},
+  {k:'eqId',l:'ID'},{k:'carpeta',l:'N° Carpeta'},{k:'inventario',l:'N° Inventario'},{k:'equipo',l:'Equipo'},
+  {k:'servicio',l:'Servicio'},{k:'unidad',l:'Unidad'},{k:'ubicacion',l:'Ubicación'},{k:'procedencia',l:'Procedencia'},
+  {k:'marca',l:'Marca'},{k:'modelo',l:'Modelo'},{k:'serie',l:'Serie'},{k:'anio',l:'Año Instalación'},
+  {k:'vidaUtil',l:'Vida Útil Residual'},{k:'clasificacion',l:'Clasificación'},{k:'enu',l:'ENU / Baja'},
+  {k:'tipo',l:'Tipo'},{k:'urgencia',l:'Urgencia'},{k:'estadoG',l:'Estado'},{k:'repro',l:'Reporte reprog.'},
   {k:'compromiso',l:'Compromiso'},{k:'atraso',l:'Días atraso'},{k:'tareas',l:'Tareas'},
   {k:'respAdmin',l:'Resp. Adm'},{k:'respEjec',l:'Resp. Eje'},
   {k:'esperaDe',l:'En espera de'},{k:'ultGestion',l:'Última gestión'},{k:'completado',l:'Completado'}
 ];
 /* columnas visibles por defecto (las del equipo extra quedan disponibles en el selector ⚙ Columnas) */
-const PEND_COLS_DEFECTO=['equipo','serie','inventario','servicio','tipo','urgencia','estadoG','repro','compromiso','atraso','tareas','respAdmin','respEjec','esperaDe','ultGestion','completado'];
+const PEND_COLS_DEFECTO=['inventario','equipo','servicio','serie','tipo','urgencia','estadoG','repro','compromiso','atraso','tareas','respAdmin','respEjec','esperaDe','ultGestion','completado'];
 function colsPendVisibles(){
   const sel=(prefs.colsPend&&prefs.colsPend.length)?new Set(prefs.colsPend):new Set(PEND_COLS_DEFECTO);
   return PEND_COLS.filter(c=>sel.has(c.k));
@@ -4092,6 +4094,7 @@ function conectarEventos(){
   });
 
   /* Detalle */
+  $('#btn-volver-detalle').addEventListener('click',()=>mostrarVista(detalleOrigen||'equipos'));
   $('#btn-abrir-mp').addEventListener('click',()=>abrirModalMP(detalleKey,null));
   $('#btn-abrir-pendiente').addEventListener('click',()=>abrirModalPendiente(detalleKey,null,null));
   $('#btn-abrir-ot').addEventListener('click',()=>abrirModalOT(detalleKey,null));
