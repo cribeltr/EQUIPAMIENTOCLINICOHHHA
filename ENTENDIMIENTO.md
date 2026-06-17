@@ -8,7 +8,7 @@
 > *Está escrito en primera persona, tal como lo expliqué, para poder leerlo y confirmar que se
 > entendió todo. Si algo no calza con la realidad, se corrige aquí primero.*
 
-_Última actualización: 2026-06-16 · App build 2026-06-16.49_
+_Última actualización: 2026-06-17 · App build 2026-06-17.50_
 
 ---
 
@@ -78,7 +78,9 @@ falta para cerrar cada uno, y cuando lo oficializo en la carta, todo queda consi
 - Cuando ejecuto un preventivo registro el detalle en la app: fecha, ejecutor, resultado,
   observaciones, **estado del equipo** y el **tipo de mantenimiento: Interno o Externo**.
 - Cuando la MP es **Externa**, registro además el **ingeniero externo y la empresa** (los datos del
-  protocolo de mantenimiento externo). Esos datos viajan al pendiente del protocolo.
+  protocolo de mantenimiento externo). Esos datos viajan al pendiente del protocolo. La app
+  **recuerda el último ingeniero y empresa** y los **precarga** en la siguiente MP externa (suelo
+  registrar varias seguidas con el mismo proveedor); se pueden cambiar.
 - Si queda una **gestión pendiente**, la app me crea un **pendiente** con su lista de trabajo:
   - **Interno** → protocolo de mantenimiento interno (ejecutor interno + el checklist).
   - **Externo** → protocolo interno **y** externo (con el ingeniero/empresa externos).
@@ -246,6 +248,8 @@ el puente entre la app y el papel que vive en la carpeta de cada equipo.
 | 2026‑06‑16 | **Almacenamiento en IndexedDB** (principal) + localStorage (respaldo): el guardado deja de fallar cuando el navegador llena el localStorage de `file://`; migra solo lo que ya había. El aviso crítico solo aparece si fallan **ambos** | En uso real el navegador dejó de guardar mis cambios (almacenamiento lleno); ahora el trabajo se guarda con cuota amplia y no se pierde |
 | 2026‑06‑16 | **Ingeniero externo como texto libre con autocompletado** (en correctivo y MP) | Tenía que elegir de una lista vacía; ahora escribo el nombre y queda memorizado para la próxima |
 | 2026‑06‑16 | **Retorno sin reporte abre el pendiente** para completarlo de inmediato | Evita que arme a mano un pendiente duplicado para gestionar el reporte que faltó |
+| 2026‑06‑17 | **Memoria del último ingeniero externo y empresa**: se precargan en la siguiente MP externa y en el Reporte de Servicio | Registro varias MP externas seguidas con el mismo proveedor (p. ej. Johans Herrera · Dräger) y no quiero re‑escribirlo cada vez |
+| 2026‑06‑17 | **Diagrama de flujo del programa** (Sí/No) en `docs/` (Mermaid + PNG + Markdown) | Tener a la vista cómo decide el programa, para revisarlo y explicarlo |
 
 ---
 

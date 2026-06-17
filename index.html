@@ -1023,7 +1023,7 @@ table.cod td{padding:7px 10px;border-bottom:1px solid var(--gris-2)}
    especificación "Flujo_Sistema_Gestion_MP_2026".
    ===================================================================== */
 
-const APP_BUILD = '2026-06-16.49';   /* identifica la versión del programa en grabaciones y soporte */
+const APP_BUILD = '2026-06-17.50';   /* identifica la versión del programa en grabaciones y soporte */
 
 /* ---------- Constantes de la especificación ---------- */
 const CAMPOS = [
@@ -2778,9 +2778,10 @@ function abrirModalMP(equipoKey, registro){
   setToggle('mp-estado', registro?registro.estadoEquipo:'Operativo', CLASES_ESTADO);
   setToggle('mp-tipo', registro?registro.tipoRegistro:'Borrador', CLASES_TIPO);
   setToggle('mp-tipo-mant', registro?(registro.tipoMantenimiento||'Interno'):'Interno', CLASES_MANT);
-  /* MP externa: ingeniero externo + empresa (para el protocolo de mantenimiento externo) */
-  $('#mp-ing-ext').value = registro?(registro.ingenieroExterno||''):'';
-  $('#mp-ext-empresa').innerHTML = opcionesEmpresas(registro?(registro.empresaExterna||''):'');
+  /* MP externa: ingeniero externo + empresa. En MP nueva se precargan los últimos usados (suelen
+     repetirse al registrar varias MP externas seguidas); se pueden cambiar. */
+  $('#mp-ing-ext').value = registro?(registro.ingenieroExterno||''):(prefs.ultimoIngExt||'');
+  $('#mp-ext-empresa').innerHTML = opcionesEmpresas(registro?(registro.empresaExterna||''):(prefs.ultimaEmpExt||''));
   toggleMPExterno();
   $('#mp-gestion').checked = registro?!!registro.gestionPendiente:false;
   $('#mp-gestion-txt').textContent = $('#mp-gestion').checked?'Sí':'No';
@@ -2838,7 +2839,9 @@ function guardarMP(){
   let mp;
   if(mpEditando){ Object.assign(mpEditando, datos, {actualizado:hoyISO()}); mp=mpEditando; toast('✅ Mantención actualizada.'); }
   else { mp=Object.assign({id:uid(), creado:hoyISO()}, datos); state.manuales.push(mp); toast('✅ Mantención guardada ('+datos.tipoRegistro+').'); }
-  prefs.ultimaFechaMP=fecha; prefs.ultimoEjecutor=ejec; guardarPrefs();
+  prefs.ultimaFechaMP=fecha; prefs.ultimoEjecutor=ejec;
+  if(datos.tipoMantenimiento==='Externo'){ if(datos.ingenieroExterno) prefs.ultimoIngExt=datos.ingenieroExterno; if(datos.empresaExterna) prefs.ultimaEmpExt=datos.empresaExterna; }
+  guardarPrefs();
   /* Gestión pendiente marcada → generar el pendiente vinculado a esta MP (si no existe ya) */
   let pendienteNuevo=null;
   if(datos.gestionPendiente && !state.pendientes.some(p=>p.origenMP===mp.id)){
@@ -3688,8 +3691,8 @@ function cargarFormOT(ot){
   $('#ot-env-empresa').innerHTML = opcionesEmpresas(ot?(ot.empresa||''):'');
   $('#ot-env-numero').value = ot?(ot.numeroEnvio||''):'';
   /* Reporte de Servicio: datos del ingeniero externo */
-  $('#ot-ing-ext').value = ot?(ot.ingenieroExterno||''):'';
-  $('#ot-serv-empresa').innerHTML = opcionesEmpresas(ot?(ot.empresa||''):'');
+  $('#ot-ing-ext').value = ot?(ot.ingenieroExterno||''):(prefs.ultimoIngExt||'');
+  $('#ot-serv-empresa').innerHTML = opcionesEmpresas(ot?(ot.empresa||''):(prefs.ultimaEmpExt||''));
   $('#ot-reporte-num').value = ot?(ot.numeroReporteServicio||''):'';
   setToggle('ot-servicio-tipo', ot?(ot.tipoServicio||'Reparación'):'Reparación', null);
   ajustarFormOTSegunTipo();
@@ -3755,6 +3758,9 @@ function guardarOT(){
     tipoServicio=valToggle('ot-servicio-tipo')||'Reparación';
     const se=$('#ot-serv-empresa').value; const empServ = se==='__nueva__'?'':se;
     if(empServ) empresa=empServ;
+    if(ingenieroExterno) prefs.ultimoIngExt=ingenieroExterno;   /* recordar para la próxima */
+    if(empServ) prefs.ultimaEmpExt=empServ;
+    guardarPrefs();
   }
   /* Cierre del evento */
   const estadoEvento = valToggle('ot-estado-evento')||'Abierto';
