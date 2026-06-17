@@ -1,0 +1,35 @@
+%% Árbol de decisión — Mantenimiento Correctivo (expediente · Folio SIGEM)
+flowchart LR
+  R(["Equipo con falla:<br/>¿qué hago en el correctivo?"])
+  R --> Q0{"¿Ya existe expediente<br/>(Folio SIGEM) abierto?"}
+  Q0 -->|No| A0["Abrir Orden de Trabajo:<br/>folio · fecha · técnico · estado · requerimiento"]
+  Q0 -->|Sí| Q1{"¿Qué corresponde ahora<br/>en el expediente?"}
+
+  Q1 -->|"Mandar a reparar fuera"| A1["Registrar Envío a Servicio Técnico:<br/>N° de envío · responsable · empresa"]
+  A1 --> Q2{"¿El equipo retornó?"}
+  Q2 -->|No| A2["Seguir en servicio técnico<br/>(cuenta días detenido)"]
+  Q2 -->|Sí| Q3{"¿Viene con su<br/>reporte de reparación?"}
+  Q3 -->|Sí| A3(["Registrar Retorno (N° guía)<br/>+ Reporte de Servicio"])
+  Q3 -->|"No, pero llegó por correo"| A4(["Registrar Retorno<br/>+ adjuntar el reporte recibido"])
+  Q3 -->|No| A5["Registrar Retorno<br/>+ Pendiente: gestionar el reporte"]
+
+  Q1 -->|"Reparación / diagnóstico externo"| A6["Reporte de Servicio:<br/>ingeniero · empresa · N° · reparación/diagnóstico"]
+
+  Q1 -->|"Requiere compra"| Q4{"¿Trato Directo<br/>o Compra Ágil?"}
+  Q4 -->|"Trato Directo"| A7["Informe técnico (N° · fecha · resp · empresa)<br/>→ orden de compra → ejecución"]
+  Q4 -->|"Compra Ágil"| A8["Orden de compra → ejecución"]
+
+  Q1 -->|"Ya está reparado"| Q5{"¿Quedó operativo?"}
+  Q5 -->|Sí| A9(["Cerrar expediente"])
+  Q5 -->|No| A10["Seguir abierto<br/>(cuenta días detenido)"]
+
+  classDef dec fill:#fff4d6,stroke:#d99a00,color:#5a4500;
+  classDef act fill:#e8f1fb,stroke:#2f6fb0,color:#143b5e;
+  classDef ok fill:#e3f6e8,stroke:#2e9e54,color:#14552b;
+  classDef bad fill:#fde8e8,stroke:#d23c3c,color:#7a1c1c;
+  classDef root fill:#dde3ee,stroke:#3a4a66,color:#1b2a44,font-weight:bold;
+  class Q0,Q1,Q2,Q3,Q4,Q5 dec;
+  class A0,A1,A6,A7,A8,A10 act;
+  class A3,A4,A9 ok;
+  class A2,A5 bad;
+  class R root;
