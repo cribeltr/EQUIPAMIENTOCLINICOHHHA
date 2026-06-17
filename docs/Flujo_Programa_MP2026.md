@@ -1,0 +1,96 @@
+# Flujo del programa — Sistema de Gestión MP 2026
+
+Diagrama de proceso del programa con salidas **Sí / No**. Cubre: carga de la planilla, el
+motor de decisión por equipo (qué hacer con cada uno), el preventivo, la reprogramación
+(ciclo del reporte con firmas), el correctivo (expediente) y la regla **Borrador → Oficial**.
+
+> Convención: **rombo** = decisión Sí/No · **rectángulo** = acción · **cápsula** = estado final.
+> La imagen lista para imprimir está en `docs/Flujo_Programa_MP2026.png`.
+
+```mermaid
+flowchart TD
+  INI(["Abrir la aplicación"]) --> Q0{"¿Planilla (Excel)<br/>cargada?"}
+  Q0 -->|No| CARGA["Cargar planilla:<br/>equipos + programación anual"]
+  Q0 -->|Sí| TAB["Tablero «¿qué hago hoy?»<br/>resumen accionable del día"]
+  CARGA --> TAB
+  TAB --> MOTOR{"Por cada equipo:<br/>motor de estado decide<br/>la siguiente acción"}
+
+  %% ---------- MOTOR DE DECISIÓN POR EQUIPO ----------
+  MOTOR --> D1{"¿Equipo detenido?<br/>No Operativo / Servicio Técnico"}
+  D1 -->|Sí| D2{"¿Tiene expediente<br/>correctivo abierto?"}
+  D2 -->|No| ABRIROT["Abrir correctivo (OT)"]
+  D2 -->|Sí| AVZ["Avanzar el expediente"]
+  D1 -->|No| D3{"¿MP del mes<br/>programada y sin resultado?"}
+  D3 -->|Sí| EJEMP["Ejecutar Mantención Preventiva"]
+  D3 -->|No| D4{"¿Pendiente vencido o<br/>protocolo sin resolver?"}
+  D4 -->|Sí| GEST["Gestionar el pendiente"]
+  D4 -->|No| ALDIA(["Equipo al día ✓"])
+
+  ABRIROT --> COR
+  AVZ --> COR
+  EJEMP --> MP
+
+  %% ---------- PREVENTIVO ----------
+  subgraph SUBMP ["🔧 Mantenimiento Preventivo"]
+    direction TB
+    MP["Registrar MP:<br/>fecha · ejecutor · estado equipo"] --> MPT{"¿Tipo de<br/>mantenimiento?"}
+    MPT -->|Externo| MPE["+ ingeniero externo + empresa<br/>(protocolo externo)"]
+    MPT -->|Interno| MPR
+    MPE --> MPR{"Resultado"}
+    MPR -->|"Realizada (Si / Si-RA)"| MPG{"¿Quedó una<br/>gestión pendiente?"}
+    MPG -->|Sí| MPP["Crear pendiente + protocolo<br/>cada ítem: Sí / No / Imprimir / Gestión"]
+    MPG -->|No| MPB(["MP guardada en Borrador"])
+    MPR -->|"Causal C1–C8"| REP
+    MPR -->|"FS / NU / Baja"| MPF(["Marcar estado:<br/>fuera de servicio / baja"])
+  end
+
+  %% ---------- REPROGRAMACIÓN ----------
+  subgraph SUBREP ["📄 Reprogramación (causal C1–C8)"]
+    direction TB
+    REP{"¿Causal C2 / C3 / C4?"}
+    REP -->|"Sí"| REPA(["No se fija fecha nueva;<br/>se registra al reintegrar el equipo"])
+    REP -->|"No · C1/C5/C6/C7/C8"| REPB["Reprogramar dentro de 30 días<br/>(origen: X + causal · destino: R)"]
+    REPB --> REPGEN["Generar reporte"] --> REPIMP["Imprimir reporte"] --> REPF{"¿Dos firmas?<br/>supervisor servicio + jefe equipos"}
+    REPF -->|No| REPNF(["Faltan firmas"])
+    REPF -->|Sí| REPCOD["Escribir el código en el Excel<br/>(mes y columna que indica la app)"]
+    REPCOD --> REPREC["Recargar la planilla"]
+  end
+
+  %% ---------- CORRECTIVO ----------
+  subgraph SUBCOR ["🔩 Mantenimiento Correctivo · expediente (Folio SIGEM)"]
+    direction TB
+    COR["Apertura OT / evento"] --> CST{"¿Se envía a<br/>servicio técnico?"}
+    CST -->|Sí| CENV["Envío: N° + responsable + empresa"] --> CRET["Retorno: N° de guía de despacho"]
+    CRET --> CREP{"¿Viene con su reporte<br/>de reparación?"}
+    CREP -->|No| CPEND["Pendiente: gestionar el reporte"]
+    CREP -->|Sí| CCOMP
+    CST -->|"No · reparación/diagnóstico externo"| CRS["Reporte de Servicio:<br/>ingeniero · empresa · N° de reporte"]
+    CRS --> CCOMP
+    CPEND --> CCOMP
+    CCOMP{"¿Requiere compra?"}
+    CCOMP -->|Sí| CTD["Trato Directo / Compra Ágil<br/>→ informe técnico → orden de compra"] --> CEX
+    CCOMP -->|No| CEX["Ejecución / visita"]
+    CEX --> COP{"¿Equipo quedó<br/>operativo?"}
+    COP -->|Sí| CCIERRE(["Cerrar expediente"])
+    COP -->|No| CABIERTO(["Sigue abierto · cuenta días detenido"])
+  end
+
+  %% ---------- BORRADOR -> OFICIAL (transversal) ----------
+  MPB -. "al recargar la planilla" .-> OFI{"¿El registro Borrador<br/>aparece con resultado<br/>en la planilla?"}
+  REPREC -.-> OFI
+  MPP -. "al cerrar la gestión" .-> OFI
+  OFI -->|Sí| OFIOK(["Pasa a OFICIAL<br/>(archivado en carpeta + en la carta)"])
+  OFI -->|No| OFIBOR(["Sigue en Borrador"])
+
+  %% ---------- estilos ----------
+  classDef dec fill:#fff4d6,stroke:#d99a00,stroke-width:1px,color:#5a4500;
+  classDef proc fill:#e8f1fb,stroke:#2f6fb0,color:#143b5e;
+  classDef ok fill:#e3f6e8,stroke:#2e9e54,color:#14552b;
+  classDef warn fill:#fde8e8,stroke:#d23c3c,color:#7a1c1c;
+  classDef entry fill:#ececf3,stroke:#777,color:#333;
+  class Q0,MOTOR,D1,D2,D3,D4,MPT,MPR,MPG,REP,REPF,CST,CREP,CCOMP,COP,OFI dec;
+  class CARGA,TAB,ABRIROT,AVZ,EJEMP,GEST,MP,MPE,MPP,REPB,REPGEN,REPIMP,REPCOD,REPREC,COR,CENV,CRET,CPEND,CRS,CTD,CEX proc;
+  class ALDIA,MPB,OFIOK,CCIERRE,REPA ok;
+  class MPF,REPNF,OFIBOR,CABIERTO,CPEND warn;
+  class INI entry;
+```
