@@ -1,0 +1,47 @@
+%% Árbol de decisión — Sistema de Gestión MP 2026 (Equipamiento Clínico HHHA)
+%% Lee de izquierda a derecha: cada rombo es una pregunta; las hojas (derecha) son la acción que corresponde.
+flowchart LR
+  R(["¿Qué corresponde<br/>hacer con este equipo?"])
+
+  %% ---------- RAMA 1: ¿está detenido? (correctivo) ----------
+  R --> Q1{"¿El equipo está detenido?<br/>No Operativo / Servicio Técnico"}
+  Q1 -->|Sí| Q1a{"¿Tiene expediente<br/>correctivo abierto?"}
+  Q1a -->|No| A1["🔴 Abrir Orden de Trabajo<br/>(Folio SIGEM)"]
+  Q1a -->|Sí| Q1b{"¿En qué etapa<br/>va el expediente?"}
+  Q1b -->|"Enviado a servicio técnico"| Q1b1{"¿El equipo retornó?"}
+  Q1b1 -->|No| A2["Seguir el envío<br/>(N° de envío · responsable)"]
+  Q1b1 -->|"Sí, sin su reporte"| A3["Pendiente:<br/>gestionar el reporte de reparación"]
+  Q1b1 -->|"Sí, con su reporte"| A4["Registrar Reporte de Servicio<br/>(reparación / diagnóstico externo)"]
+  Q1b -->|"Falta resolver la compra"| A5["Trato Directo / Compra Ágil<br/>→ informe técnico → orden de compra"]
+  Q1b -->|"Ya reparado"| Q1c{"¿Quedó operativo?"}
+  Q1c -->|Sí| A6(["Cerrar expediente"])
+  Q1c -->|No| A6b["Seguir abierto<br/>(cuenta días detenido)"]
+
+  %% ---------- RAMA 2: ¿le toca MP este mes? (preventivo) ----------
+  Q1 -->|No| Q2{"¿Le toca MP este mes<br/>y no tiene resultado?"}
+  Q2 -->|Sí| Q2a{"¿Cómo resultó<br/>la mantención?"}
+  Q2a -->|"Realizada (Si / Si-RA)"| Q2g{"¿Quedó gestión pendiente?"}
+  Q2g -->|Sí| A7["Crear protocolo (Interno/Externo)<br/>marcar Sí / No / Imprimir / Gestión"]
+  Q2g -->|No| A7b(["MP en Borrador<br/>→ oficial al recargar la carta"])
+  Q2a -->|"No se pudo · causal C1–C8"| Q2b{"¿Qué causal?"}
+  Q2b -->|"C2 / C3 / C4"| A8["No se fija fecha;<br/>se registra al reintegrar el equipo"]
+  Q2b -->|"C1 / C5 / C6 / C7 / C8"| A9["Reprogramar dentro de 30 días<br/>→ generar → imprimir → 2 firmas → oficializar"]
+  Q2a -->|"FS / NU / Baja"| A10["Marcar fuera de servicio / baja"]
+
+  %% ---------- RAMA 3: ¿hay pendientes? ----------
+  Q2 -->|No| Q3{"¿Tiene pendientes<br/>o protocolos por resolver?"}
+  Q3 -->|"Sí · reprogramación"| A11["Avanzar el reporte según su etapa:<br/>generar · imprimir · firmar · oficializar · cerrar"]
+  Q3 -->|"Sí · protocolo / otro"| A12["Trabajar la lista:<br/>Sí / No / Imprimir / Gestión (+ subtareas)"]
+  Q3 -->|No| A13(["✓ Equipo al día"])
+
+  %% ---------- estilos ----------
+  classDef dec fill:#fff4d6,stroke:#d99a00,color:#5a4500;
+  classDef act fill:#e8f1fb,stroke:#2f6fb0,color:#143b5e;
+  classDef ok fill:#e3f6e8,stroke:#2e9e54,color:#14552b;
+  classDef bad fill:#fde8e8,stroke:#d23c3c,color:#7a1c1c;
+  classDef root fill:#dde3ee,stroke:#3a4a66,color:#1b2a44,font-weight:bold;
+  class Q1,Q1a,Q1b,Q1b1,Q1c,Q2,Q2a,Q2g,Q2b,Q3 dec;
+  class A1,A2,A4,A5,A6b,A7,A9,A10,A11,A12 act;
+  class A6,A7b,A13,A8 ok;
+  class A3 bad;
+  class R root;
